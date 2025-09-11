@@ -218,22 +218,151 @@ async def edit_info(ctx, item: str, *, value: str):
 # ... (이전 답변의 !정신도전, !육체도전, !도전완료 코드와 동일하게 작동하므로 생략)
 # ... 필요하시면 해당 부분을 여기에 붙여넣으시면 됩니다.
 
-@bot.command(name="스탯조회")
-async def check_stats(ctx):
+# --- 플레이어 정보 및 스탯 성장 명령어 ---
+
+
+    """자신의 이름, 이모지, 컬러 정보를 수정합니다."""
     player_id = str(ctx.author.id)
     all_data = load_data()
+    if player_id not in all_data or not all_data[player_id].get("registered", False):
+        await ctx.send("먼저 `!등록`을 진행해주세요.")
+        return
+
+    editable_items = {"이름": "name", "이모지": "emoji", "컬러": "color"}
+    if item not in editable_items:
+        await ctx.send("수정할 수 있는 항목은 `이름`, `이모지`, `컬러` 입니다.")
+        return
+    
+    key = editable_items[item]
+    all_data[player_id][key] = value
+    save_data(all_data)
+    await ctx.send(f"'{item}' 정보가 '{value}' (으)로 성공적으로 변경되었습니다.")
+
+
+@bot.command(name="정신도전")
+async def register_mental_challenge(ctx):
+    """오전 6시~12시 사이에 오늘의 정신 도전을 등록합니다."""
+    now_kst = datetime.now(KST).time()
+    if not (time(6, 0) <= now_kst < time(12, 0)):
+        embed = discord.Embed(title="❌ 도전 등록 실패", description="**도전 등록은 오전 6시부터 12시까지만 가능합니다.**", color=discord.Color.red())
+        await ctx.send(embed=embed)
+        return
+
+    all_data = load_data()
+    player_id = str(ctx.author.id)
+    # 데이터가 없는 신규 유저를 위한 처리
     if player_id not in all_data:
-        await ctx.send("데이터가 없습니다. `!등록` 또는 `!정신도전` 등으로 스탯을 쌓아주세요.")
+        all_data[player_id] = {"mental": 0, "physical": 0, "challenge_type": None, "challenge_registered_today": False}
+
+    player_data = all_data[player_id]
+
+    if player_data.get("challenge_registered_today", False):
+        challenge = "정신" if player_data.get('challenge_type') == 'mental' else '육체'
+        embed = discord.Embed(title="⚠️ 이미 도전이 등록되었습니다", description=f"이미 오늘의 **{challenge} 도전**을 등록하셨습니다.", color=discord.Color.orange())
+        await ctx.send(embed=embed)
+        return
+
+    player_data["challenge_type"] = "mental"
+    player_data["challenge_registered_today"] = True
+    save_data(all_data)
+    
+    embed = discord.Embed(title="🧠 '정신' 도전 등록 완료!", description=f"**{ctx.author.display_name}님, 오늘의 '정신' 도전이 정상적으로 등록되었습니다.**", color=discord.Color.purple())
+    embed.add_field(name="진행 안내", value="오후 6시 이후 `!도전완료` 명령어를 통해\n결과를 보고하고 스탯을 획득하세요!", inline=False)
+    embed.set_footer(text="꾸준함이 성장의 열쇠입니다.")
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="육체도전")
+async def register_physical_challenge(ctx):
+    """오전 6시~12시 사이에 오늘의 육체 도전을 등록합니다."""
+    now_kst = datetime.now(KST).time()
+    if not (time(6, 0) <= now_kst < time(12, 0)):
+        embed = discord.Embed(title="❌ 도전 등록 실패", description="**도전 등록은 오전 6시부터 12시까지만 가능합니다.**", color=discord.Color.red())
+        await ctx.send(embed=embed)
+        return
+
+    all_data = load_data()
+    player_id = str(ctx.author.id)
+    if player_id not in all_data:
+        all_data[player_id] = {"mental": 0, "physical": 0, "challenge_type": None, "challenge_registered_today": False}
+    
+    player_data = all_data[player_id]
+
+    if player_data.get("challenge_registered_today", False):
+        challenge = "정신" if player_data.get('challenge_type') == 'mental' else '육체'
+        embed = discord.Embed(title="⚠️ 이미 도전이 등록되었습니다", description=f"이미 오늘의 **{challenge} 도전**을 등록하셨습니다.", color=discord.Color.orange())
+        await ctx.send(embed=embed)
+        return
+
+    player_data["challenge_type"] = "physical"
+    player_data["challenge_registered_today"] = True
+    save_data(all_data)
+    
+    embed = discord.Embed(title="💪 '육체' 도전 등록 완료!", description=f"**{ctx.author.display_name}님, 오늘의 '육체' 도전이 정상적으로 등록되었습니다.**", color=discord.Color.gold())
+    embed.add_field(name="진행 안내", value="오후 6시 이후 `!도전완료` 명령어를 통해\n결과를 보고하고 스탯을 획득하세요!", inline=False)
+    embed.set_footer(text="강인한 육체에 강인한 정신이 깃듭니다.")
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="도전완료")
+async def complete_challenge(ctx):
+    """오후 18시~24시 사이에 등록한 도전을 완료하고 스탯을 얻습니다."""
+    now_kst = datetime.now(KST).time()
+    if not (time(18, 0) <= now_kst): 
+        embed = discord.Embed(title="❌ 도전 완료 실패", description="**도전 완료는 오후 6시부터 자정까지만 가능합니다.**", color=discord.Color.red())
+        await ctx.send(embed=embed)
+        return
+        
+    all_data = load_data()
+    player_id = str(ctx.author.id)
+    if player_id not in all_data:
+        all_data[player_id] = {"mental": 0, "physical": 0, "challenge_type": None, "challenge_registered_today": False}
+        
+    player_data = all_data[player_id]
+    
+    if not player_data.get("challenge_registered_today", False):
+        embed = discord.Embed(title="🤔 등록된 도전 없음", description="아직 오늘 등록한 도전이 없습니다.\n먼저 `!정신도전` 또는 `!육체도전`을 등록해주세요.", color=discord.Color.light_grey())
+        await ctx.send(embed=embed)
+        return
+    
+    if player_data.get("challenge_type") is None:
+        embed = discord.Embed(title="✅ 이미 오늘의 도전을 완료했습니다", description="스탯을 이미 받으셨습니다. 내일 다시 도전해주세요!", color=discord.Color.green())
+        await ctx.send(embed=embed)
+        return
+        
+    challenge_type = player_data["challenge_type"]
+    
+    if challenge_type == "mental":
+        player_data["mental"] += 1
+        stat_name = "정신"; emoji = "🧠"; color = discord.Color.purple()
+    elif challenge_type == "physical":
+        player_data["physical"] += 1
+        stat_name = "육체"; emoji = "💪"; color = discord.Color.gold()
+    
+    player_data["challenge_type"] = None
+    save_data(all_data)
+    
+    embed = discord.Embed(title=f"{emoji} 도전 성공! {stat_name} 스탯 상승!", description=f"**{ctx.author.display_name}님, 오늘의 도전을 성공적으로 완수했습니다.**", color=color)
+    embed.add_field(name="획득 스탯", value=f"**{stat_name} +1**", inline=False)
+    await ctx.send(embed=embed)
+
+    # 도전 완료 후 자동으로 스탯 조회를 보여주기 위해 check_stats 함수를 직접 호출
+    await check_stats(ctx, member=None)
+    """자신 또는 다른 플레이어의 프로필과 스탯 정보를 확인합니다."""
+    
+    # 멘션된 유저가 없으면, 명령어를 사용한 유저를 대상으로 설정
+    target_user = member or ctx.author
+    
+    player_id = str(target_user.id)
+    all_data = load_data()
+
+    if player_id not in all_data or not all_data[player_id].get("registered", False):
+        await ctx.send(f"**{target_user.display_name}**님은 아직 `!등록`하지 않은 플레이어입니다.")
         return
     
     player_data = all_data[player_id]
     
-    if not player_data.get("registered", False):
-        # 등록되지 않은 유저를 위한 간단한 스탯 조회
-        # ... (이전 답변의 스탯 조회 Embed 코드와 동일)
-        await ctx.send("등록되지 않은 유저의 간단한 스탯 정보입니다. `!등록` 후 모든 정보를 확인하세요.")
-        return
-
+    # 스탯 계산
     mental = player_data['mental']
     physical = player_data['physical']
     total_stats = mental + physical
@@ -241,15 +370,82 @@ async def check_stats(ctx):
     progress = total_stats % 5
     progress_bar = '■ ' * progress + '□ ' * (5 - progress)
 
-    embed = discord.Embed(title=f"{player_data['name']}님의 정보", color=int(player_data['color'][1:], 16))
-    embed.set_thumbnail(url=ctx.author.display_avatar.url)
+    # Embed 생성
+    embed = discord.Embed(
+        title=f"{player_data['name']}님의 프로필 및 스탯 정보",
+        color=int(player_data['color'][1:], 16)
+    )
+    embed.set_thumbnail(url=target_user.display_avatar.url)
+    
+    # 프로필 정보 필드
     embed.add_field(name="칭호", value=player_data['class'], inline=True)
-    embed.add_field(name="레벨", value=str(level), inline=True)
+    embed.add_field(name="레벨", value=f"**{level}**", inline=True)
     embed.add_field(name="대표 이모지", value=player_data['emoji'], inline=True)
+    
+    # 스탯 정보 필드
     embed.add_field(name="🧠 정신", value=f"`{mental}`", inline=True)
     embed.add_field(name="💪 육체", value=f"`{physical}`", inline=True)
-    embed.add_field(name=f"📊 다음 레벨까지 ({progress}/5)", value=f"**{progress_bar}**", inline=False)
+    embed.add_field(name="🔥 총 스탯", value=f"`{total_stats}`", inline=True)
+
+    # 레벨업 진행도 필드
+    embed.add_field(
+        name=f"📊 다음 레벨까지 ({progress}/5)",
+        value=f"**{progress_bar}**",
+        inline=False
+    )
+    
     await ctx.send(embed=embed)
+
+@bot.command(name="스탯조회")
+async def check_stats(ctx, member: discord.Member = None):
+    """자신 또는 다른 플레이어의 프로필과 스탯 정보를 확인합니다."""
+    
+    # 멘션된 유저가 없으면, 명령어를 사용한 유저를 대상으로 설정
+    target_user = member or ctx.author
+    
+    player_id = str(target_user.id)
+    all_data = load_data()
+
+    if player_id not in all_data or not all_data[player_id].get("registered", False):
+        await ctx.send(f"**{target_user.display_name}**님은 아직 `!등록`하지 않은 플레이어입니다.")
+        return
+    
+    player_data = all_data[player_id]
+    
+    # 스탯 계산
+    mental = player_data['mental']
+    physical = player_data['physical']
+    total_stats = mental + physical
+    level = total_stats // 5
+    progress = total_stats % 5
+    progress_bar = '■ ' * progress + '□ ' * (5 - progress)
+
+    # Embed 생성
+    embed = discord.Embed(
+        title=f"{player_data['name']}님의 프로필 및 스탯 정보",
+        color=int(player_data['color'][1:], 16)
+    )
+    embed.set_thumbnail(url=target_user.display_avatar.url)
+    
+    # 프로필 정보 필드
+    embed.add_field(name="칭호", value=player_data['class'], inline=True)
+    embed.add_field(name="레벨", value=f"**{level}**", inline=True)
+    embed.add_field(name="대표 이모지", value=player_data['emoji'], inline=True)
+    
+    # 스탯 정보 필드
+    embed.add_field(name="🧠 정신", value=f"`{mental}`", inline=True)
+    embed.add_field(name="💪 육체", value=f"`{physical}`", inline=True)
+    embed.add_field(name="🔥 총 스탯", value=f"`{total_stats}`", inline=True)
+
+    # 레벨업 진행도 필드
+    embed.add_field(
+        name=f"📊 다음 레벨까지 ({progress}/5)",
+        value=f"**{progress_bar}**",
+        inline=False
+    )
+    
+    await ctx.send(embed=embed)
+
 
 # --- 전투 명령어 ---
 @bot.command(name="대결")
