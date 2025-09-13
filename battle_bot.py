@@ -57,7 +57,7 @@ class Battle:
     def _setup_player_stats(self, all_data, user):
         player_id = str(user.id)
         base_stats = all_data[player_id]
-        level = (base_stats['mental'] + base_stats['physical']) // 5
+        level = 1 + (base_stats['mental'] + base_stats['physical']) // 5
         max_hp = max(1, level * 10 + base_stats['physical']) # 최소 체력 1 보장
         
         return {
@@ -416,7 +416,7 @@ async def check_stats(ctx, member: discord.Member = None):
     mental = player_data['mental']
     physical = player_data['physical']
     total_stats = mental + physical
-    level = total_stats // 5
+    level = 1 + total_stats // 5
     progress = total_stats % 5
     progress_bar = '■ ' * progress + '□ ' * (5 - progress)
 
