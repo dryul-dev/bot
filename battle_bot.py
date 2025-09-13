@@ -82,8 +82,11 @@ class Battle:
             if (i + 1) % 5 == 0: grid_str += "\n"
         embed.add_field(name="[ 전투 맵 ]", value=grid_str, inline=False)
         for p_stats in [self.p1_stats, self.p2_stats]:
-            hp_bar = "❤️" * int(p_stats['current_hp'] / p_stats['max_hp'] * 10)
-            hp_bar += "🖤" * (10 - len(hp_bar))
+            embed.add_field(
+            name=f"{p_stats['emoji']} {p_stats['name']} ({p_stats['class']})",
+            value=f"**HP: {p_stats['current_hp']} / {p_stats['max_hp']}**",
+            inline=True
+        )
             embed.add_field(name=f"{p_stats['emoji']} {p_stats['name']} ({p_stats['class']})", value=f"HP: {p_stats['current_hp']}/{p_stats['max_hp']}\n{hp_bar}", inline=True)
         embed.add_field(name="남은 행동", value=f"{self.turn_actions_left}회", inline=True)
         embed.add_field(name="📜 전투 로그", value="\n".join(self.battle_log), inline=False)
@@ -268,7 +271,7 @@ async def register_mental_challenge(ctx):
     
     embed = discord.Embed(title="🧠 '정신' 도전 등록 완료!", description=f"**{ctx.author.display_name}님, 오늘의 '정신' 도전이 정상적으로 등록되었습니다.**", color=discord.Color.purple())
     embed.add_field(name="진행 안내", value="오후 6시 이후 `!도전완료` 명령어를 통해\n결과를 보고하고 스탯을 획득하세요!", inline=False)
-    embed.set_footer(text="꾸준함이 성장의 열쇠입니다.")
+    embed.set_footer(text="정신을 단련합시다!")
     await ctx.send(embed=embed)
 
 
@@ -300,7 +303,7 @@ async def register_physical_challenge(ctx):
     
     embed = discord.Embed(title="💪 '육체' 도전 등록 완료!", description=f"**{ctx.author.display_name}님, 오늘의 '육체' 도전이 정상적으로 등록되었습니다.**", color=discord.Color.gold())
     embed.add_field(name="진행 안내", value="오후 6시 이후 `!도전완료` 명령어를 통해\n결과를 보고하고 스탯을 획득하세요!", inline=False)
-    embed.set_footer(text="강인한 육체에 강인한 정신이 깃듭니다.")
+    embed.set_footer(text="육체를 단련합시다!")
     await ctx.send(embed=embed)
 
 
@@ -495,8 +498,8 @@ async def move(ctx, *directions):
     p_stats = battle.get_player_stats(ctx.author)
     mobility = 2 if p_stats['class'] == '검사' else 1
     
-    if len(directions) != mobility:
-        return await ctx.send(f"👉 **{p_stats['class']}**의 이동력은 **{mobility}**입니다. `{mobility}`개의 방향을 입력해주세요. (예: `!이동 w d`)", delete_after=10)
+    if not (1 <= len(directions) <= mobility):
+        return await ctx.send(f"👉 **{p_stats['class']}**은(는) **1칸에서 {mobility}칸**까지 이동할 수 있습니다. (방향키 개수: {len(directions)}개)", delete_after=10)
 
     current_pos = p_stats['pos']
     path = [current_pos]
