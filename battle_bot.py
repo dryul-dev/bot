@@ -572,16 +572,28 @@ async def attack(ctx):
     else: # 근거리
         damage = attacker['physical'] + random.randint(0, attacker['mental'])
     
-    # 검사 특수 능력 적용
-    if attacker['double_damage_buff']:
-        damage *= 2
-        attacker['double_damage_buff'] = False
-        battle.add_log(f"🔥 {attacker['name']}의 분노의 일격!")
-
-    damage = max(1, damage) # 최소 데미지 1 보장
-    target['current_hp'] = max(0, target['current_hp'] - damage)
+    # ▼▼▼ 여기가 수정/추가된 부분입니다 ▼▼▼
+    # 직업별 데미지 배율 적용
+    multiplier = 1.0
+    if attacker['class'] == '마법사':
+        multiplier = 1.2
+    elif attacker['class'] == '검사':
+        # 특수 능력 버프가 활성화되었는지 확인
+        if attacker['double_damage_buff']:
+            multiplier = 2.0
+            attacker['double_damage_buff'] = False # 버프 사용 후 비활성화
+            battle.add_log(f"🔥 {attacker['name']}의 분노의 일격!")
+        else:
+            multiplier = 1.5
     
-    battle.add_log(f"💥 {attacker['name']}이(가) {target['name']}에게 **{damage}**의 피해를 입혔습니다!")
+    # 최종 데미지 계산 (배율 적용 및 반올림)
+    final_damage = round(damage * multiplier)
+    final_damage = max(1, final_damage) # 최소 데미지 1 보장
+    # ▲▲▲ 여기가 수정/추가된 부분입니다 ▲▲▲
+    
+    target['current_hp'] = max(0, target['current_hp'] - final_damage)
+    
+    battle.add_log(f"💥 {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해를 입혔습니다!")
 
     if target['current_hp'] == 0:
         await battle.end_battle(attacker, f"{target['name']}의 체력이 0이 되어 전투에서 승리했습니다!")
@@ -594,9 +606,7 @@ async def special_ability(ctx):
     battle = active_battles.get(ctx.channel.id)
     if not battle or ctx.author != battle.current_turn_player: return
 
-    if battle.turn_actions_left < 2:
-        return await ctx.send("특수 능력은 행동력을 소모하지 않은 상태에서만 사용할 수 있습니다.", delete_after=10)
-
+   
     p_stats = battle.get_player_stats(ctx.author)
     if p_stats['special_cooldown'] > 0:
         return await ctx.send(f"쿨타임이 {p_stats['special_cooldown']}턴 남았습니다.", delete_after=10)
@@ -620,23 +630,26 @@ async def special_ability(ctx):
 
         except asyncio.TimeoutError: return await ctx.send("시간이 초과되어 취소되었습니다.")
 
+    
+    # ▼▼▼ 마검사 특수 능력 효과 수정 ▼▼▼
     elif player_class == '마검사':
-        heal_amount = p_stats['max_hp'] // 5
+        heal_amount = p_stats['level'] # 자신의 레벨만큼 회복
         p_stats['current_hp'] = min(p_stats['max_hp'], p_stats['current_hp'] + heal_amount)
         battle.add_log(f"💚 {p_stats['name']}이(가) 체력을 **{heal_amount}**만큼 회복했습니다!")
+    # ▲▲▲ 마검사 특수 능력 효과 수정 ▲▲▲
 
+    # ▼▼▼ 검사 특수 능력 효과 수정 ▼▼▼
     elif player_class == '검사':
-        self_damage = p_stats['level']
+        self_damage = p_stats['level'] # 자신의 레벨만큼 데미지
         p_stats['current_hp'] = max(1, p_stats['current_hp'] - self_damage)
-        p_stats['double_damage_buff'] = True
+        p_stats['double_damage_buff'] = True # 다음 1회 공격 데미지 2배 버프 활성화
         battle.add_log(f"🩸 {p_stats['name']}이(가) 자신의 체력을 소모하여 다음 공격을 강화합니다!")
+    # ▲▲▲ 검사 특수 능력 효과 수정 ▲▲▲
 
-    # 특수 능력 사용 후 처리
-    p_stats['special_cooldown'] = 2 # 현재 턴 포함 2턴
-    battle.turn_actions_left = 0
-    await battle.display_board("특수 능력을 사용하여 턴을 종료합니다.")
-    await asyncio.sleep(2)
-    await battle.next_turn()
+    # ▼▼▼ 여기가 수정된 부분입니다 (행동력 1 소모로 변경) ▼▼▼
+    p_stats['special_cooldown'] = 2 
+    await battle.handle_action_cost(1) # 턴 전체 소모 대신 행동력 1 소모
+    # ▲▲▲ 여기가 수정된 부분입니다 ▲▲▲
 
 @bot.command(name="기권")
 async def forfeit(ctx):
