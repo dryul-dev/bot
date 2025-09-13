@@ -73,24 +73,39 @@ class Battle:
         self.battle_log.append(message)
         if len(self.battle_log) > 5: self.battle_log.pop(0)
 
+
     async def display_board(self, extra_message=""):
         turn_player_stats = self.get_player_stats(self.current_turn_player)
-        embed = discord.Embed(title="⚔️ 전투 진행중 ⚔️", description=f"**현재 턴: {turn_player_stats['name']}** (`!이동`, `!공격`, `!특수`)", color=turn_player_stats['color'])
+        
+        embed = discord.Embed(
+            title="⚔️ 전투 진행중 ⚔️",
+            description=f"**현재 턴: {turn_player_stats['name']}** (`!이동`, `!공격`, `!특수`)",
+            color=turn_player_stats['color']
+        )
+        
+        # 그리드 표시
         grid_str = ""
         for i, cell in enumerate(self.grid):
             grid_str += f" `{cell}` "
-            if (i + 1) % 5 == 0: grid_str += "\n"
+            if (i + 1) % 5 == 0:
+                grid_str += "\n"
         embed.add_field(name="[ 전투 맵 ]", value=grid_str, inline=False)
+
+        # 플레이어 정보 표시 (HP바가 삭제된 최종 버전)
         for p_stats in [self.p1_stats, self.p2_stats]:
             embed.add_field(
-            name=f"{p_stats['emoji']} {p_stats['name']} ({p_stats['class']})",
-            value=f"**HP: {p_stats['current_hp']} / {p_stats['max_hp']}**",
-            inline=True
-        )
-            embed.add_field(name=f"{p_stats['emoji']} {p_stats['name']} ({p_stats['class']})", value=f"HP: {p_stats['current_hp']}/{p_stats['max_hp']}\n{hp_bar}", inline=True)
+                name=f"{p_stats['emoji']} {p_stats['name']} ({p_stats['class']})",
+                value=f"**HP: {p_stats['current_hp']} / {p_stats['max_hp']}**",
+                inline=True
+            )
+        
+        # 남은 행동 및 로그 표시
         embed.add_field(name="남은 행동", value=f"{self.turn_actions_left}회", inline=True)
         embed.add_field(name="📜 전투 로그", value="\n".join(self.battle_log), inline=False)
-        if extra_message: embed.set_footer(text=extra_message)
+        if extra_message:
+            embed.set_footer(text=extra_message)
+
+        # ❗️❗️❗️ 가장 중요: 완성된 Embed를 채널에 전송하는 부분 ❗️❗️❗️
         await self.channel.send(embed=embed)
 
     async def handle_action_cost(self, cost=1):
