@@ -578,11 +578,11 @@ async def attack(ctx):
     if attacker['class'] == '마법사':
         multiplier = 1.2
     elif attacker['class'] == '검사':
-        # 특수 능력 버프가 활성화되었는지 확인
-        if attacker['double_damage_buff']:
+        # 버프 횟수가 남아있는지 확인
+        if attacker.get('double_damage_buff', 0) > 0:
             multiplier = 2.0
-            attacker['double_damage_buff'] = False # 버프 사용 후 비활성화
-            battle.add_log(f"🔥 {attacker['name']}의 분노의 일격!")
+            attacker['double_damage_buff'] -= 1 # 버프 횟수 1 차감
+            battle.add_log(f"🔥 {attacker['name']}의 분노의 일격! (남은 횟수: {attacker['double_damage_buff']}회)")
         else:
             multiplier = 1.5
     
@@ -640,11 +640,10 @@ async def special_ability(ctx):
 
     # ▼▼▼ 검사 특수 능력 효과 수정 ▼▼▼
     elif player_class == '검사':
-        self_damage = p_stats['level'] # 자신의 레벨만큼 데미지
+        self_damage = p_stats['level']
         p_stats['current_hp'] = max(1, p_stats['current_hp'] - self_damage)
-        p_stats['double_damage_buff'] = True # 다음 1회 공격 데미지 2배 버프 활성화
-        battle.add_log(f"🩸 {p_stats['name']}이(가) 자신의 체력을 소모하여 다음 공격을 강화합니다!")
-    # ▲▲▲ 검사 특수 능력 효과 수정 ▲▲▲
+        p_stats['double_damage_buff'] = 2  # 버프 횟수를 2로 설정
+        battle.add_log(f"🩸 {p_stats['name']}이(가) 자신의 체력을 소모하여 다음 2회 공격을 강화합니다!")
 
     # ▼▼▼ 여기가 수정된 부분입니다 (행동력 1 소모로 변경) ▼▼▼
     p_stats['special_cooldown'] = 2 
