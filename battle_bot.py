@@ -1,5 +1,4 @@
 import discord
-import pytz
 from discord.ext import commands, tasks
 import json
 import os
@@ -61,22 +60,22 @@ class Battle:
         level = 1 + ((base_stats['mental'] + base_stats['physical']) // 5)
         max_hp = max(1, level * 10 + base_stats['physical'])
         
-        # ▼▼▼ 여기가 수정/추가된 부분입니다 ▼▼▼
-        # 휴식 버프가 있는지 확인하고 적용
         if base_stats.get("rest_buff_active", False):
-            hp_buff = level * 5  # 레벨 비례 HP 보너스
+            hp_buff = level * 5
             max_hp += hp_buff
             self.add_log(f"🌙 {base_stats['name']}이(가) 휴식 효과로 최대 체력이 {hp_buff} 증가합니다!")
-            
-            # 버프 사용 후 즉시 비활성화 처리
             all_data[player_id]["rest_buff_active"] = False
             save_data(all_data)
-        # ▲▲▲ 여기가 수정/추가된 부분입니다 ▲▲▲
 
         return {
             "id": user.id, "name": base_stats['name'], "emoji": base_stats['emoji'], "class": base_stats['class'],
+            # ▼▼▼ 여기가 추가/수정된 부분입니다 ▼▼▼
+            "attribute": base_stats.get("attribute"),
+            "advanced_class": base_stats.get("advanced_class"),
+            "defense": 0, # 방어력 기본값은 0
+            # ▲▲▲ 여기가 추가/수정된 부분입니다 ▲▲▲
             "color": int(base_stats['color'][1:], 16), "mental": base_stats['mental'], "physical": base_stats['physical'],
-            "level": level, "max_hp": max_hp, "current_hp": max_hp, # current_hp도 증가된 max_hp로 시작
+            "level": level, "max_hp": max_hp, "current_hp": max_hp,
             "pos": -1, "special_cooldown": 0, "double_damage_buff": 0
         }
 
@@ -220,7 +219,8 @@ async def register(ctx):
         all_data[player_id] = {
             "mental": 0, "physical": 0, "challenge_type": None, "challenge_registered_today": False,
             "registered": True, "class": player_class, "name": name_msg.content, 
-            "emoji": emoji_msg.content, "color": color_msg.content
+            "emoji": emoji_msg.content, "color": color_msg.content, "attribute": None,
+            "advanced_class": None
         }
         save_data(all_data)
         await ctx.send("🎉 등록이 완료되었습니다!")
@@ -270,52 +270,125 @@ async def edit_info(ctx, item: str, *, value: str):
     save_data(all_data)
     await ctx.send(f"'{item}' 정보가 '{value}' (으)로 성공적으로 변경되었습니다.")
 
-@bot.command(name="시간대설정")
-async def set_timezone(ctx, timezone_name: str):
-    """자신의 시간대를 설정합니다. (예: !시간대설정 Asia/Seoul)"""
+@bot.command(name="리셋")
+async def reset_my_data(ctx):
+    """자신의 모든 데이터(프로필, 스탯)를 완전히 초기화합니다."""
     
-    # 입력된 시간대 이름이 유효한지 확인
-    if timezone_name not in pytz.all_timezones:
-        embed = discord.Embed(
-            title="❌ 잘못된 시간대 이름입니다.",
-            description="[이곳]에서 자신의 지역에 맞는 'TZ database name'을 찾아 정확하게 입력해주세요.",
-            url="https://en.wikipedia.org/wiki/List_of_tz_database_time_zones",
-            color=discord.Color.red()
-        )
-        embed.add_field(name="입력 예시", value="`!시간대설정 America/New_York`\n`!시간대설정 Europe/London`")
-        return await ctx.send(embed=embed)
-
-    all_data = load_data()
     player_id = str(ctx.author.id)
+    all_data = load_data()
 
-    if player_id not in all_data:
-        # 아직 등록하지 않은 유저라면 기본 데이터 생성
-        all_data[player_id] = {}
-        
-    all_data[player_id]['timezone'] = timezone_name
+    if player_id not in all_data or not all_data[player_id].get("registered", False):
+        await ctx.send("아직 등록된 정보가 없어 초기화할 수 없습니다.")
+        return
+
+    # 1단계: 사용자에게 재확인 받기 (경고 메시지 수정)
+    embed = discord.Embed(
+        title="⚠️ 모든 데이터 초기화 경고 ⚠️",
+        description=f"**{ctx.author.display_name}**님, 정말로 모든 데이터를 초기화하시겠습니까?\n"
+                    f"**직업, 이름, 스탯 등 모든 정보**가 영구적으로 사라지며 되돌릴 수 없습니다.\n\n"
+                    f"이것은 완벽한 '새로운 시작'을 의미합니다.\n\n"
+                    f"동의하시면 30초 안에 `초기화 동의`라고 입력해주세요.",
+        color=discord.Color.red()
+    )
+    await ctx.send(embed=embed)
+
+    def check(m):
+        return m.author == ctx.author and m.channel == ctx.channel and m.content == "초기화 동의"
+
+    try:
+        await bot.wait_for('message', check=check, timeout=30.0)
+    except asyncio.TimeoutError:
+        return await ctx.send("시간이 초과되어 초기화가 취소되었습니다.")
+
+    # 2단계: 데이터 초기화 진행 (스탯 보존 로직 삭제)
+    
+    # ▼▼▼ 여기가 수정된 부분입니다 ▼▼▼
+    # 모든 정보를 담은 새로운 딕셔너리로 덮어씁니다.
+    all_data[player_id] = {
+        'mental': 0, # 스탯을 0으로 초기화
+        'physical': 0, # 스탯을 0으로 초기화
+        'registered': False,
+        'class': None,
+        'name': None,
+        'emoji': None,
+        'color': None,
+        'attribute': None,
+        'advanced_class': None,
+        'challenge_type': None,
+        'challenge_registered_today': False,
+        'rest_buff_active': False
+    }
+    # ▲▲▲ 여기가 수정된 부분입니다 ▲▲▲
+    
     save_data(all_data)
     
-    # 설정된 시간대의 현재 시간 보여주기
-    user_tz = pytz.timezone(timezone_name)
-    current_time = datetime.now(user_tz).strftime("%Y년 %m월 %d일 %H:%M")
+    # 3단계: 완료 메시지 전송
+    await ctx.send(f"✅ **{ctx.author.display_name}**님의 모든 데이터가 성공적으로 초기화되었습니다. `!등록` 명령어를 사용해 새로운 여정을 시작하세요!")
+    """자신의 프로필 정보(직업, 이름 등)를 모두 초기화합니다. (스탯은 유지)"""
+    
+    player_id = str(ctx.author.id)
+    all_data = load_data()
 
+    # 등록된 유저인지 먼저 확인
+    if player_id not in all_data or not all_data[player_id].get("registered", False):
+        await ctx.send("아직 등록된 정보가 없어 초기화할 수 없습니다.")
+        return
+
+    # 1단계: 사용자에게 재확인 받기
     embed = discord.Embed(
-        title="✅ 시간대 설정 완료",
-        description=f"**{ctx.author.display_name}**님의 시간대가 **{timezone_name}**(으)로 설정되었습니다.",
-        color=discord.Color.blue()
+        title="⚠️ 정보 초기화 경고 ⚠️",
+        description=f"**{ctx.author.display_name}**님, 정말로 모든 프로필 정보를 초기화하시겠습니까?\n"
+                    f"**직업, 이름, 이모지, 속성 등**이 모두 사라지며 되돌릴 수 없습니다.\n\n"
+                    f"**단, 힘들게 쌓은 `정신`과 `육체` 스탯은 그대로 유지됩니다.**\n\n"
+                    f"동의하시면 30초 안에 `초기화 동의`라고 입력해주세요.",
+        color=discord.Color.red()
     )
-    embed.add_field(name="현재 설정된 시간", value=current_time)
     await ctx.send(embed=embed)
+
+    def check(m):
+        return m.author == ctx.author and m.channel == ctx.channel and m.content == "초기화 동의"
+
+    try:
+        await bot.wait_for('message', check=check, timeout=30.0)
+    except asyncio.TimeoutError:
+        return await ctx.send("시간이 초과되어 초기화가 취소되었습니다.")
+
+    # 2단계: 데이터 초기화 진행
+    player_data = all_data[player_id]
+    
+    # 기존 정신/육체 스탯 보존
+    mental_stat = player_data.get('mental', 0)
+    physical_stat = player_data.get('physical', 0)
+
+    # 새로운 초기화된 데이터로 덮어쓰기
+    all_data[player_id] = {
+        'mental': mental_stat,
+        'physical': physical_stat,
+        'registered': False,
+        'class': None,
+        'name': None,
+        'emoji': None,
+        'color': None,
+        'attribute': None,
+        'advanced_class': None,
+        'challenge_type': None,
+        'challenge_registered_today': False,
+        'rest_buff_active': False
+    }
+    
+    save_data(all_data)
+    
+    # 3단계: 완료 메시지 전송
+    await ctx.send(f"✅ **{ctx.author.display_name}**님의 프로필 정보가 성공적으로 초기화되었습니다. `!등록` 명령어를 사용해 새로운 여정을 시작하세요!")
+
 
 
 @bot.command(name="정신도전")
 async def register_mental_challenge(ctx):
     """오전 6시~12시 사이에 오늘의 정신 도전을 등록합니다."""
     now_kst = datetime.now(KST).time()
-    if not (time(6, 0) <= now_kst < time(12, 0)):
-        embed = discord.Embed(title="❌ 도전 등록 실패", description="**도전 등록은 오전 6시부터 12시까지만 가능합니다.**", color=discord.Color.red())
-        await ctx.send(embed=embed)
-        return
+    if not (time(6, 0) <= now_local < time(14, 0)):
+        embed = discord.Embed(title="❌ 도전 등록 실패", description=f"**도전 등록은 현지 시간 기준 오전 6시부터 오후 2시까지만 가능합니다.**\n(현재 시간: {now_local.strftime('%H:%M')})", color=discord.Color.red())
 
     all_data = load_data()
     player_id = str(ctx.author.id)
@@ -345,8 +418,8 @@ async def register_mental_challenge(ctx):
 async def register_physical_challenge(ctx):
     """오전 6시~12시 사이에 오늘의 육체 도전을 등록합니다."""
     now_kst = datetime.now(KST).time()
-    if not (time(6, 0) <= now_kst < time(12, 0)):
-        embed = discord.Embed(title="❌ 도전 등록 실패", description="**도전 등록은 오전 6시부터 12시까지만 가능합니다.**", color=discord.Color.red())
+    if not (time(6, 0) <= now_local < time(14, 0)):
+        embed = discord.Embed(title="❌ 도전 등록 실패", description=f"**도전 등록은 현지 시간 기준 오전 6시부터 오후 2시까지만 가능합니다.**\n(현재 시간: {now_local.strftime('%H:%M')})", color=discord.Color.red())
         await ctx.send(embed=embed)
         return
 
@@ -377,8 +450,11 @@ async def register_physical_challenge(ctx):
 async def complete_challenge(ctx):
     """오후 18시~24시 사이에 등록한 도전을 완료하고 스탯을 얻습니다."""
     now_kst = datetime.now(KST).time()
-    if not (time(18, 0) <= now_kst): 
-        embed = discord.Embed(title="❌ 도전 완료 실패", description="**도전 완료는 오후 6시부터 자정까지만 가능합니다.**", color=discord.Color.red())
+    # 오후 6시 이후이거나, 또는 새벽 2시 이전인 경우를 모두 허용
+    if not (now_local.hour >= 18 or now_local.hour < 2): 
+        embed = discord.Embed(title="❌ 도전 완료 실패", description=f"**도전 완료는 현지 시간 기준 오후 6시부터 새벽 2시까지만 가능합니다.**\n(현재 시간: {now_local.strftime('%H:%M')})", color=discord.Color.red())
+        if "timezone" not in player_data:
+            embed.set_footer(text="`!시간대설정` 명령어로 자신의 시간대를 설정할 수 있습니다.")
         await ctx.send(embed=embed)
         return
         
@@ -556,6 +632,31 @@ async def check_stats(ctx, member: discord.Member = None):
     
     await ctx.send(embed=embed)
 
+@bot.command(name="전직")
+async def advance_class(ctx):
+    """5레벨 도달 시 상위 직업으로 전직합니다."""
+    
+    # --- 스킬 미구현으로 인해 현재 비활성화 ---
+    await ctx.send("🚧 전직 시스템은 현재 준비 중입니다. 기대해주세요! 🚧")
+    return
+    
+    # --- 아래는 나중에 활성화할 전직 로직의 뼈대입니다 ---
+    player_id = str(ctx.author.id)
+    all_data = load_data()
+    player_data = all_data.get(player_id)
+
+    if not player_data or not player_data.get("registered"):
+        return await ctx.send("먼저 `!등록`을 진행해주세요.")
+    
+    if player_data.get("advanced_class"):
+        return await ctx.send(f"이미 **{player_data['advanced_class']}**(으)로 전직하셨습니다.")
+
+    level = 1 + ((player_data['mental'] + player_data['physical']) // 5)
+    if level < 5:
+        return await ctx.send(f"전직은 5레벨부터 가능합니다. (현재 레벨: {level})")
+
+    # (이후 여기에 직업별 선택지를 제시하고, 유저의 입력을 받아 처리하는 로직 추가)
+
 
 # --- 전투 명령어 ---
 @bot.command(name="대결")
@@ -646,6 +747,76 @@ async def attack(ctx):
     target = battle.get_opponent_stats(ctx.author)
     distance = battle.get_distance(attacker['pos'], target['pos'])
 
+    can_attack, attack_type = False, ""
+    # (공격 가능 여부 판정 로직은 동일)
+    if attacker['class'] == '마법사' and 3 <= distance <= 5: can_attack, attack_type = True, "원거리"
+    elif attacker['class'] == '마검사':
+        if distance == 1: can_attack, attack_type = True, "근거리"
+        elif 2 <= distance <= 3: can_attack, attack_type = True, "원거리"
+    elif attacker['class'] == '검사' and distance == 1: can_attack, attack_type = True, "근거리"
+
+    if not can_attack:
+        return await ctx.send("❌ 공격 사거리가 아닙니다.", delete_after=10)
+        
+    # --- 데미지 계산 로직 (대폭 수정) ---
+
+    # 1. 기본 데미지 계산
+    base_damage = attacker['physical'] + random.randint(0, attacker['mental']) if attack_type == "근거리" else attacker['mental'] + random.randint(0, attacker['physical'])
+    
+    # 2. 크리티컬 및 직업 배율 계산
+    multiplier = 1.0
+    is_critical = False
+    
+    # 검사 특수능력 버프가 최우선
+    if attacker.get('double_damage_buff', 0) > 0:
+        multiplier = 2.0
+        attacker['double_damage_buff'] -= 1
+        battle.add_log(f"🔥 {attacker['name']}의 분노의 일격! (남은 횟수: {attacker['double_damage_buff']}회)")
+    # 버프가 없다면 10% 확률로 크리티컬 발동
+    elif random.random() < 0.10: 
+        multiplier = 2.0
+        is_critical = True
+        battle.add_log(f"💥 치명타 발생!")
+    # 크리티컬/버프가 아닐 경우 기본 직업 배율 적용
+    else:
+        if attacker['class'] == '마법사': multiplier = 1.5
+        elif attacker['class'] == '검사': multiplier = 1.2
+            
+    # 3. 상성 데미지 계산
+    advantages = {'Wit': 'Gut', 'Gut': 'Heart', 'Heart': 'Wit'}
+    attribute_damage = 0
+    if attacker['attribute'] and target['attribute']:
+        # 유리한 상성일 경우
+        if advantages.get(attacker['attribute']) == target['attribute']:
+            bonus = random.randint(0, attacker['level'])
+            attribute_damage += bonus
+            battle.add_log(f"👍 상성 우위! 추가 데미지 +{bonus}")
+        # 불리한 상성일 경우
+        elif advantages.get(target['attribute']) == attacker['attribute']:
+            penalty = random.randint(0, attacker['level'])
+            attribute_damage -= penalty
+            battle.add_log(f"👎 상성 열세... 데미지 감소 -{penalty}")
+
+    # 4. 최종 데미지 계산
+    total_damage = round(base_damage * multiplier) + attribute_damage
+    final_damage = max(1, total_damage - target.get('defense', 0)) # 방어력 적용
+
+    # --- 데미지 계산 로직 종료 ---
+
+    target['current_hp'] = max(0, target['current_hp'] - final_damage)
+    battle.add_log(f"💥 {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해를 입혔습니다!")
+
+    if target['current_hp'] == 0:
+        await battle.end_battle(attacker, f"{target['name']}의 체력이 0이 되어 전투에서 승리했습니다!")
+    else:
+        await battle.handle_action_cost(1)
+    battle = active_battles.get(ctx.channel.id)
+    if not battle or ctx.author != battle.current_turn_player or battle.turn_actions_left <= 0: return
+    
+    attacker = battle.get_player_stats(ctx.author)
+    target = battle.get_opponent_stats(ctx.author)
+    distance = battle.get_distance(attacker['pos'], target['pos'])
+
     # 직업별 유효 공격 판정
     can_attack = False
     attack_type = ""
@@ -668,7 +839,7 @@ async def attack(ctx):
     # 직업별 데미지 배율 적용
     multiplier = 1.0
     if attacker['class'] == '마법사':
-        multiplier = 1.2
+        multiplier = 1.5
     elif attacker['class'] == '검사':
         # 버프 횟수가 남아있는지 확인
         if attacker.get('double_damage_buff', 0) > 0:
@@ -676,7 +847,7 @@ async def attack(ctx):
             attacker['double_damage_buff'] -= 1 # 버프 횟수 1 차감
             battle.add_log(f"🔥 {attacker['name']}의 분노의 일격! (남은 횟수: {attacker['double_damage_buff']}회)")
         else:
-            multiplier = 1.5
+            multiplier = 1.2
     
     # 최종 데미지 계산 (배율 적용 및 반올림)
     final_damage = round(damage * multiplier)
