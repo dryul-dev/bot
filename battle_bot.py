@@ -1,4 +1,5 @@
 import discord
+import pytz
 from discord.ext import commands, tasks
 import json
 import os
@@ -57,13 +58,26 @@ class Battle:
     def _setup_player_stats(self, all_data, user):
         player_id = str(user.id)
         base_stats = all_data[player_id]
-        level = 1 + (base_stats['mental'] + base_stats['physical']) // 5
-        max_hp = max(1, level * 10 + base_stats['physical']) # 최소 체력 1 보장
+        level = 1 + ((base_stats['mental'] + base_stats['physical']) // 5)
+        max_hp = max(1, level * 10 + base_stats['physical'])
         
+        # ▼▼▼ 여기가 수정/추가된 부분입니다 ▼▼▼
+        # 휴식 버프가 있는지 확인하고 적용
+        if base_stats.get("rest_buff_active", False):
+            hp_buff = level * 5  # 레벨 비례 HP 보너스
+            max_hp += hp_buff
+            self.add_log(f"🌙 {base_stats['name']}이(가) 휴식 효과로 최대 체력이 {hp_buff} 증가합니다!")
+            
+            # 버프 사용 후 즉시 비활성화 처리
+            all_data[player_id]["rest_buff_active"] = False
+            save_data(all_data)
+        # ▲▲▲ 여기가 수정/추가된 부분입니다 ▲▲▲
+
         return {
             "id": user.id, "name": base_stats['name'], "emoji": base_stats['emoji'], "class": base_stats['class'],
             "color": int(base_stats['color'][1:], 16), "mental": base_stats['mental'], "physical": base_stats['physical'],
-            "level": level, "max_hp": max_hp, "current_hp": max_hp, "pos": -1, "special_cooldown": 0, "double_damage_buff": False
+            "level": level, "max_hp": max_hp, "current_hp": max_hp, # current_hp도 증가된 max_hp로 시작
+            "pos": -1, "special_cooldown": 0, "double_damage_buff": 0
         }
 
     def get_player_stats(self, user): return self.p1_stats if user.id == self.p1_user.id else self.p2_stats
@@ -256,6 +270,43 @@ async def edit_info(ctx, item: str, *, value: str):
     save_data(all_data)
     await ctx.send(f"'{item}' 정보가 '{value}' (으)로 성공적으로 변경되었습니다.")
 
+@bot.command(name="시간대설정")
+async def set_timezone(ctx, timezone_name: str):
+    """자신의 시간대를 설정합니다. (예: !시간대설정 Asia/Seoul)"""
+    
+    # 입력된 시간대 이름이 유효한지 확인
+    if timezone_name not in pytz.all_timezones:
+        embed = discord.Embed(
+            title="❌ 잘못된 시간대 이름입니다.",
+            description="[이곳]에서 자신의 지역에 맞는 'TZ database name'을 찾아 정확하게 입력해주세요.",
+            url="https://en.wikipedia.org/wiki/List_of_tz_database_time_zones",
+            color=discord.Color.red()
+        )
+        embed.add_field(name="입력 예시", value="`!시간대설정 America/New_York`\n`!시간대설정 Europe/London`")
+        return await ctx.send(embed=embed)
+
+    all_data = load_data()
+    player_id = str(ctx.author.id)
+
+    if player_id not in all_data:
+        # 아직 등록하지 않은 유저라면 기본 데이터 생성
+        all_data[player_id] = {}
+        
+    all_data[player_id]['timezone'] = timezone_name
+    save_data(all_data)
+    
+    # 설정된 시간대의 현재 시간 보여주기
+    user_tz = pytz.timezone(timezone_name)
+    current_time = datetime.now(user_tz).strftime("%Y년 %m월 %d일 %H:%M")
+
+    embed = discord.Embed(
+        title="✅ 시간대 설정 완료",
+        description=f"**{ctx.author.display_name}**님의 시간대가 **{timezone_name}**(으)로 설정되었습니다.",
+        color=discord.Color.blue()
+    )
+    embed.add_field(name="현재 설정된 시간", value=current_time)
+    await ctx.send(embed=embed)
+
 
 @bot.command(name="정신도전")
 async def register_mental_challenge(ctx):
@@ -412,6 +463,47 @@ async def complete_challenge(ctx):
         inline=False
     )
     
+    await ctx.send(embed=embed)
+
+@bot.command(name="휴식")
+async def take_rest(ctx):
+    """오늘의 도전을 쉬고, 다음 전투를 위한 버프를 받습니다."""
+    all_data = load_data()
+    player_id = str(ctx.author.id)
+    
+    # 등록된 플레이어인지 확인
+    if player_id not in all_data or not all_data[player_id].get("registered", False):
+        await ctx.send("먼저 `!등록`을 진행해주세요.")
+        return
+
+    player_data = all_data[player_id]
+
+    # 오늘 이미 도전이나 휴식을 했는지 확인
+    if player_data.get("challenge_registered_today", False):
+        action = player_data.get("challenge_type", "활동")
+        embed = discord.Embed(
+            title="⚠️ 이미 오늘의 활동을 마쳤습니다",
+            description=f"오늘은 이미 **'{action}'**을(를) 선택하셨습니다. 내일 다시 시도해주세요.",
+            color=discord.Color.orange()
+        )
+        await ctx.send(embed=embed)
+        return
+
+    # 휴식 버프 적용 및 오늘 활동 완료 처리
+    player_data["challenge_type"] = "휴식"
+    player_data["challenge_registered_today"] = True
+    player_data["rest_buff_active"] = True  # 버프 활성화
+    save_data(all_data)
+
+    embed = discord.Embed(
+        title="🌙 편안한 휴식을 선택했습니다",
+        description=f"**{ctx.author.display_name}**님, 오늘의 도전을 쉬고 재충전합니다.",
+        color=discord.Color.green()
+    )
+    embed.add_field(
+        name="휴식 보너스",
+        value="다음 전투 시작 시, 1회에 한해 **최대 체력이 증가**하는 효과를 받습니다."
+    )
     await ctx.send(embed=embed)
 
 @bot.command(name="스탯조회")
