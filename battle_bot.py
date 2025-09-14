@@ -286,7 +286,6 @@ async def reset_my_data(ctx):
         title="⚠️ 모든 데이터 초기화 경고 ⚠️",
         description=f"**{ctx.author.display_name}**님, 정말로 모든 데이터를 초기화하시겠습니까?\n"
                     f"**직업, 이름, 스탯 등 모든 정보**가 영구적으로 사라지며 되돌릴 수 없습니다.\n\n"
-                    f"이것은 완벽한 '새로운 시작'을 의미합니다.\n\n"
                     f"동의하시면 30초 안에 `초기화 동의`라고 입력해주세요.",
         color=discord.Color.red()
     )
@@ -326,60 +325,7 @@ async def reset_my_data(ctx):
     await ctx.send(f"✅ **{ctx.author.display_name}**님의 모든 데이터가 성공적으로 초기화되었습니다. `!등록` 명령어를 사용해 새로운 여정을 시작하세요!")
     """자신의 프로필 정보(직업, 이름 등)를 모두 초기화합니다. (스탯은 유지)"""
     
-    player_id = str(ctx.author.id)
-    all_data = load_data()
-
-    # 등록된 유저인지 먼저 확인
-    if player_id not in all_data or not all_data[player_id].get("registered", False):
-        await ctx.send("아직 등록된 정보가 없어 초기화할 수 없습니다.")
-        return
-
-    # 1단계: 사용자에게 재확인 받기
-    embed = discord.Embed(
-        title="⚠️ 정보 초기화 경고 ⚠️",
-        description=f"**{ctx.author.display_name}**님, 정말로 모든 프로필 정보를 초기화하시겠습니까?\n"
-                    f"**직업, 이름, 이모지, 속성 등**이 모두 사라지며 되돌릴 수 없습니다.\n\n"
-                    f"**단, 힘들게 쌓은 `정신`과 `육체` 스탯은 그대로 유지됩니다.**\n\n"
-                    f"동의하시면 30초 안에 `초기화 동의`라고 입력해주세요.",
-        color=discord.Color.red()
-    )
-    await ctx.send(embed=embed)
-
-    def check(m):
-        return m.author == ctx.author and m.channel == ctx.channel and m.content == "초기화 동의"
-
-    try:
-        await bot.wait_for('message', check=check, timeout=30.0)
-    except asyncio.TimeoutError:
-        return await ctx.send("시간이 초과되어 초기화가 취소되었습니다.")
-
-    # 2단계: 데이터 초기화 진행
-    player_data = all_data[player_id]
     
-    # 기존 정신/육체 스탯 보존
-    mental_stat = player_data.get('mental', 0)
-    physical_stat = player_data.get('physical', 0)
-
-    # 새로운 초기화된 데이터로 덮어쓰기
-    all_data[player_id] = {
-        'mental': mental_stat,
-        'physical': physical_stat,
-        'registered': False,
-        'class': None,
-        'name': None,
-        'emoji': None,
-        'color': None,
-        'attribute': None,
-        'advanced_class': None,
-        'challenge_type': None,
-        'challenge_registered_today': False,
-        'rest_buff_active': False
-    }
-    
-    save_data(all_data)
-    
-    # 3단계: 완료 메시지 전송
-    await ctx.send(f"✅ **{ctx.author.display_name}**님의 프로필 정보가 성공적으로 초기화되었습니다. `!등록` 명령어를 사용해 새로운 여정을 시작하세요!")
 
 
 
@@ -453,9 +399,7 @@ async def complete_challenge(ctx):
     # 오후 6시 이후이거나, 또는 새벽 2시 이전인 경우를 모두 허용
     if not (now_local.hour >= 18 or now_local.hour < 2): 
         embed = discord.Embed(title="❌ 도전 완료 실패", description=f"**도전 완료는 현지 시간 기준 오후 6시부터 새벽 2시까지만 가능합니다.**\n(현재 시간: {now_local.strftime('%H:%M')})", color=discord.Color.red())
-        if "timezone" not in player_data:
-            embed.set_footer(text="`!시간대설정` 명령어로 자신의 시간대를 설정할 수 있습니다.")
-        await ctx.send(embed=embed)
+        
         return
         
     all_data = load_data()
