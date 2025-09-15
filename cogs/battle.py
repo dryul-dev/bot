@@ -252,6 +252,7 @@ class TeamBattle(Battle): # Battle 클래스의 기능을 상속받음
 class BattleCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.active_battles = bot.active_battles # main.py의 목록을 가져옴
 
     @commands.command(name="대결")
     async def battle_request(self, ctx, opponent: discord.Member):
