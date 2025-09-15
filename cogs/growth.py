@@ -282,8 +282,18 @@ class GrowthCog(commands.Cog):
         player_data = all_data[player_id]
 
         if player_data.get("challenge_registered_today", False):
-            action_type = player_data.get("challenge_type", "활동")
-            embed = discord.Embed(title="⚠️ 이미 오늘의 활동을 마쳤습니다", description=f"오늘은 이미 **'{action_type}'**을(를) 선택하셨습니다.", color=discord.Color.orange())
+            action_type = player_data.get("challenge_type", "알 수 없는 활동")
+            # '완료됨' 상태에 대한 구체적인 메시지 추가
+            if action_type == "완료됨":
+                description = "이미 오늘의 도전을 성공적으로 완료했습니다. 내일 다시 시도해주세요."
+            else:
+                description = f"오늘은 이미 **'{action_type}'**을(를) 선택하셨습니다."
+            
+            embed = discord.Embed(
+                title="⚠️ 이미 오늘의 활동을 마쳤습니다",
+                description=description,
+                color=discord.Color.orange()
+            )
             await ctx.send(embed=embed)
             return
 
@@ -312,8 +322,18 @@ class GrowthCog(commands.Cog):
         player_data = all_data[player_id]
 
         if player_data.get("challenge_registered_today", False):
-            action_type = player_data.get("challenge_type", "활동")
-            embed = discord.Embed(title="⚠️ 이미 오늘의 활동을 마쳤습니다", description=f"오늘은 이미 **'{action_type}'**을(를) 선택하셨습니다.", color=discord.Color.orange())
+            action_type = player_data.get("challenge_type", "알 수 없는 활동")
+            # '완료됨' 상태에 대한 구체적인 메시지 추가
+            if action_type == "완료됨":
+                description = "이미 오늘의 도전을 성공적으로 완료했습니다. 내일 다시 시도해주세요."
+            else:
+                description = f"오늘은 이미 **'{action_type}'**을(를) 선택하셨습니다."
+            
+            embed = discord.Embed(
+                title="⚠️ 이미 오늘의 활동을 마쳤습니다",
+                description=description,
+                color=discord.Color.orange()
+            )
             await ctx.send(embed=embed)
             return
 
@@ -359,10 +379,12 @@ class GrowthCog(commands.Cog):
             stat_name, emoji, color = "정신", "🧠", discord.Color.purple()
         elif challenge_type == "육체도전":
             player_data["physical"] += 1
-            stat_name, emoji, color = "육체", "💪", discord.Color.gold()
+            stat_name, emoji, color = "육체", "💪", discord.Color.gold()\
+            
+        
         
         # 완료 처리: challenge_type을 None으로 바꿔 중복 완료 방지
-        player_data["challenge_type"] = None
+        player_data["challenge_type"] = "완료됨"
         save_data(all_data)
         
         embed = discord.Embed(title=f"{emoji} 도전 성공! {stat_name} 스탯 상승!", description=f"**{ctx.author.display_name}**님, 오늘의 도전을 성공적으로 완수했습니다.", color=color)
@@ -405,6 +427,30 @@ class GrowthCog(commands.Cog):
         await ctx.send(embed=embed)
 
 
+    # cogs/growth.py 파일의 GrowthCog 클래스 내부에 추가
+
+    @commands.command(name="수동초기화")
+    @commands.is_owner() # 봇 소유자만 실행 가능하도록 제한
+    async def manual_reset_challenges(self, ctx):
+        """[관리자용] 모든 유저의 일일 도전 상태를 수동으로 초기화합니다."""
+        await ctx.send("모든 유저의 일일 도전 상태 초기화를 시작합니다...")
+        
+        all_data = load_data()
+        reset_count = 0
+        for player_id, player_data in all_data.items():
+            # 도전 상태 플래그가 True인 경우에만 초기화 진행
+            if player_data.get("challenge_registered_today") is True:
+                player_data["challenge_registered_today"] = False
+                player_data["challenge_type"] = None
+                reset_count += 1
+        
+        save_data(all_data)
+        await ctx.send(f"✅ 완료! 총 {reset_count}명의 유저 도전 상태를 초기화했습니다.")
+
+    @manual_reset_challenges.error
+    async def manual_reset_error(self, ctx, error):
+        if isinstance(error, commands.NotOwner):
+            await ctx.send("이 명령어는 봇 소유자만 사용할 수 있습니다.")
 
 # 봇에 Cog를 추가하기 위한 필수 함수
 async def setup(bot):
