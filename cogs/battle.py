@@ -277,7 +277,7 @@ class BattleCog(commands.Cog):
             pass
         
     @commands.command(name="팀대결")
-    async def team_battle_request(ctx, teammate: discord.Member, opponent1: discord.Member, opponent2: discord.Member):
+    async def team_battle_request(self, ctx, teammate: discord.Member, opponent1: discord.Member, opponent2: discord.Member):
         if ctx.channel.id in active_battles: return await ctx.send("이 채널에서는 이미 전투가 진행중입니다.")
         players = {ctx.author, teammate, opponent1, opponent2}
         if len(players) < 4: return await ctx.send("모든 플레이어는 서로 다른 유저여야 합니다.")
@@ -305,7 +305,7 @@ class BattleCog(commands.Cog):
         pass
     
     @commands.command(name="공격")
-    async def attack(ctx, target_user: discord.Member = None):
+    async def attack(self, ctx, target_user: discord.Member = None):
         battle = active_battles.get(ctx.channel.id)
         if not battle: return
         
@@ -476,7 +476,7 @@ class BattleCog(commands.Cog):
      # --- 전투 행동 명령어 ---
     
     @commands.command(name="이동")
-    async def move(ctx, *directions):
+    async def move(self, ctx, *directions):
         battle = active_battles.get(ctx.channel.id)
         if not battle or ctx.author != battle.current_turn_player or battle.turn_actions_left <= 0: return
 
@@ -524,7 +524,7 @@ class BattleCog(commands.Cog):
         pass
 
     @commands.command(name="특수")
-    async def special_ability(ctx):
+    async def special_ability(self, ctx):
         battle = active_battles.get(ctx.channel.id)
         if not battle: return
 
@@ -576,7 +576,7 @@ class BattleCog(commands.Cog):
         pass 
 
     @commands.command(name="스킬")
-    async def use_skill(ctx, skill_number: int, target_user: discord.Member):
+    async def use_skill(self, ctx, skill_number: int, target_user: discord.Member):
         battle = active_battles.get(ctx.channel.id)
         if not battle: return
 
@@ -745,7 +745,7 @@ class BattleCog(commands.Cog):
         await battle.handle_action_cost(1)
 
     @commands.command(name="기권")
-    async def forfeit(ctx):
+    async def forfeit(self, ctx):
         battle = active_battles.get(ctx.channel.id)
         if not battle: return
         
