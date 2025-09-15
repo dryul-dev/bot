@@ -10,14 +10,13 @@ from cogs.monster import PveBattle
 
 DATA_FILE = "player_data.json"
 
-
-# 데이터 로딩/저장 함수와 Battle/TeamBattle 클래스를 여기에 위치시킵니다.
 def load_data():
     if not os.path.exists(DATA_FILE): return {}
     with open(DATA_FILE, 'r', encoding='utf-8') as f: return json.load(f)
 
 def save_data(data):
     with open(DATA_FILE, 'w', encoding='utf-8') as f: json.dump(data, f, indent=4, ensure_ascii=False)
+
 
 # --- 1:1 전투 관리 클래스 ---
 class Battle:
@@ -133,8 +132,8 @@ class Battle:
             self.add_log(f"🏆 {winner_stats['name']}님이 승리하여 스쿨 포인트 10점을 획득했습니다!")
         embed = discord.Embed(title="🎉 전투 종료! 🎉", description=f"**승자: {winner_stats['name']}**\n> {reason}", color=winner_stats['color'])
         await self.channel.send(embed=embed)
-        if self.channel.id in self.bot.active_battles: 
-            del self.bot.active_battles[self.channel.id]
+        if self.channel.id in self.active_battles: 
+            del self.active_battles[self.channel.id]
         
     def get_coords(self, pos): return pos // 5, pos % 5
     def get_distance(self, pos1, pos2): r1, c1 = self.get_coords(pos1); r2, c2 = self.get_coords(pos2); return max(abs(r1 - r2), abs(c1 - c2))
@@ -236,8 +235,8 @@ class TeamBattle(Battle): # Battle 클래스의 기능을 상속받음
         winner_representative_stats = self.players[winner_ids[0]]
         embed = discord.Embed(title=f"🎉 {winner_team_name} 승리! 🎉", description=f"> {reason}", color=winner_representative_stats['color'])
         await self.channel.send(embed=embed)
-        if self.channel.id in self.bot.active_battles: 
-            del self.bot.active_battles[self.channel.id]
+        if self.channel.id in self.active_battles: 
+            del self.active_battles[self.channel.id]
     
     async def timeout_task(self):
         try:
@@ -286,7 +285,8 @@ class BattleCog(commands.Cog):
             reaction, user = await self.bot.wait_for('reaction_add', timeout=15.0, check=check)
             if str(reaction.emoji) == "✅":
                 await ctx.send("대결이 성사되었습니다! 전투를 시작합니다.")
-                battle = Battle(ctx.channel, ctx.author, opponent, self.bot)
+                # 클래스에 active_battles 참조를 전달
+                battle = Battle(ctx.channel, ctx.author, opponent, self.active_battles)
                 self.active_battles[ctx.channel.id] = battle
                 await battle.start_turn_timer()
                 await battle.display_board()
@@ -315,18 +315,35 @@ class BattleCog(commands.Cog):
                 if user.id not in accepted_opponents:
                     accepted_opponents.add(user.id)
                     await ctx.send(f"✅ {user.display_name}님이 대결을 수락했습니다. (남은 인원: {2-len(accepted_opponents)}명)")
+            await ctx.send("양 팀 모두 대결을 수락했습니다! 전투를 시작합니다.")
+            team_a = [ctx.author, teammate]; team_b = [opponent1, opponent2]
+            # 클래스에 active_battles 참조를 전달
+            battle = TeamBattle(ctx.channel, team_a, team_b, self.active_battles)
+            self.active_battles[ctx.channel.id] = battle
+            await battle.next_turn()
         except asyncio.TimeoutError: return await ctx.send("시간이 초과되어 대결이 취소되었습니다.")
         
-        await ctx.send("양 팀 모두 대결을 수락했습니다! 전투를 시작합니다.")
-        team_a = [ctx.author, teammate]; team_b = [opponent1, opponent2]
-        battle = TeamBattle(ctx.channel, team_a, team_b, self.bot)
-        self.active_battles[ctx.channel.id] = battle
-        await battle.next_turn()
+    async def get_current_player_and_battle(self, ctx):
+        """모든 전투 명령어에서 공통으로 사용할 플레이어 및 전투 정보 확인 함수"""
+        battle = self.active_battles.get(ctx.channel.id)
+        if not battle: return None, None
+        
+        current_player_id = None
+        if isinstance(battle, PveBattle):
+            if battle.current_turn != "player": return None, None
+            current_player_id = battle.player_stats['id']
+        elif isinstance(battle, (Battle, TeamBattle)):
+            current_player_id = battle.current_turn_player.id if isinstance(battle, Battle) else battle.current_turn_player_id
+
+        if ctx.author.id != current_player_id: return None, None
+        
+        return battle, current_player_id        
+
 
     
     @commands.command(name="공격")
     async def attack(self, ctx, target_user: discord.Member = None):
-        battle = self.active_battles.get(ctx.channel.id)
+        battle, current_player_id = await self.get_current_player_and_battle(ctx)
         if not battle: return
         
         # 1:1 대결과 팀 대결의 현재 턴 플레이어 확인 방식이 다름
@@ -432,8 +449,11 @@ class BattleCog(commands.Cog):
 
     @commands.command(name="이동")
     async def move(self, ctx, *directions):
-        battle = self.active_battles.get(ctx.channel.id)
+        battle, current_player_id = await self.get_current_player_and_battle(ctx)
         if not battle: return
+
+        if isinstance(battle, PveBattle):
+            return await ctx.send("사냥 중에는 이동할 수 없습니다.")
         
         current_player_id = battle.current_turn_player.id if isinstance(battle, Battle) else battle.current_turn_player_id
         if ctx.author.id != current_player_id or battle.turn_actions_left <= 0:
@@ -491,7 +511,7 @@ class BattleCog(commands.Cog):
 
     @commands.command(name="특수")
     async def special_ability(self, ctx):
-        battle = self.active_battles.get(ctx.channel.id)
+        battle, current_player_id = await self.get_current_player_and_battle(ctx)
         if not battle: return
 
         current_player_id = battle.current_turn_player.id if isinstance(battle, Battle) else battle.current_turn_player_id
@@ -544,7 +564,7 @@ class BattleCog(commands.Cog):
 
     @commands.command(name="스킬")
     async def use_skill(self, ctx, skill_number: int, target_user: discord.Member = None):
-        battle = self.active_battles.get(ctx.channel.id)
+        battle, current_player_id = await self.get_current_player_and_battle(ctx)
         if not battle: return
 
         # --- 1. 현재 턴 플레이어 및 기본 정보 확인 ---
@@ -707,7 +727,7 @@ class BattleCog(commands.Cog):
 
     @commands.command(name="기권")
     async def forfeit(self, ctx):
-        battle = self.active_battles.get(ctx.channel.id)
+        battle= await self.get_current_player_and_battle(ctx)
         if not battle: return
         
         if isinstance(battle, Battle):

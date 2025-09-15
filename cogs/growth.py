@@ -452,6 +452,57 @@ class GrowthCog(commands.Cog):
         if isinstance(error, commands.NotOwner):
             await ctx.send("이 명령어는 봇 소유자만 사용할 수 있습니다.")
 
+# cogs/growth.py 파일의 GrowthCog 클래스 내부에 추가
+
+    @commands.command(name="데이터점검")
+    @commands.is_owner() # 봇 소유자만 실행 가능
+    async def fix_data_structure(self, ctx):
+        """[관리자용] 모든 유저 데이터의 구조를 최신 상태로 업데이트하고 정리합니다."""
+        await ctx.send("모든 유저 데이터 구조 점검 및 업데이트를 시작합니다...")
+        
+        all_data = load_data()
+        updated_users = 0
+        
+        for player_id, player_data in all_data.items():
+            updated = False
+            
+            # --- 기본값 설정 (필드가 없을 경우에만 추가됨) ---
+            if 'school_points' not in player_data:
+                player_data.setdefault('school_points', 0)
+                updated = True
+            if 'inventory' not in player_data:
+                player_data.setdefault('inventory', [])
+                updated = True
+            if 'gold' not in player_data:
+                player_data.setdefault('gold', 0)
+                updated = True
+            if 'pve_inventory' not in player_data:
+                player_data.setdefault('pve_inventory', [])
+                updated = True
+            if 'attribute' not in player_data:
+                player_data.setdefault('attribute', None)
+                updated = True
+            if 'advanced_class' not in player_data:
+                player_data.setdefault('advanced_class', None)
+                updated = True
+            
+            # --- 임시 데이터 초기화 ---
+            player_data['challenge_registered_today'] = False
+            player_data['challenge_type'] = None
+            player_data['rest_buff_active'] = False
+
+            if updated:
+                updated_users += 1
+
+        save_data(all_data)
+        await ctx.send(f"✅ 완료! 총 {len(all_data)}명의 유저 중 {updated_users}명의 데이터 구조를 업데이트했습니다.")
+
+    @fix_data_structure.error
+    async def fix_data_error(self, ctx, error):
+        if isinstance(error, commands.NotOwner):
+            await ctx.send("이 명령어는 봇 소유자만 사용할 수 있습니다.")
+
+
 # 봇에 Cog를 추가하기 위한 필수 함수
 async def setup(bot):
     await bot.add_cog(GrowthCog(bot))

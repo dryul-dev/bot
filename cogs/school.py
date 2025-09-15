@@ -76,46 +76,6 @@ class SchoolCog(commands.Cog):
         await ctx.send(embed=embed)
 
 
-# cogs/school.py 의 SchoolCog 클래스 내부에 추가
-
-    @commands.command(name="버리기")
-    async def discard_item(self, ctx, *, item_name: str):
-        """주머니에 있는 아이템을 버립니다."""
-        all_data = load_data()
-        player_id = str(ctx.author.id)
-        player_data = all_data.get(player_id)
-        
-        if not player_data:
-            return await ctx.send("먼저 `!등록`을 진행해주세요.")
-
-        inventory = player_data.get("inventory", [])
-        if item_name not in inventory:
-            return await ctx.send(f"'{item_name}' 아이템을 가지고 있지 않습니다.")
-
-        # 사용자에게 재확인 받기
-        embed = discord.Embed(
-            title="🗑️ 아이템 버리기 확인",
-            description=f"정말로 **{item_name}** 아이템을 버리시겠습니까?\n버린 아이템은 되찾을 수 없습니다.",
-            color=discord.Color.red()
-        )
-        embed.set_footer(text="동의하시면 30초 안에 '예'를 입력해주세요.")
-        await ctx.send(embed=embed)
-
-        def check(m):
-            return m.author == ctx.author and m.channel == ctx.channel and m.content.lower() == '예'
-        
-        try:
-            await self.bot.wait_for('message', check=check, timeout=30.0)
-        except asyncio.TimeoutError:
-            return await ctx.send("시간이 초과되어 아이템 버리기가 취소되었습니다.")
-
-        # 아이템 제거 및 데이터 저장
-        inventory.remove(item_name)
-        player_data["inventory"] = inventory
-        save_data(all_data)
-
-        await ctx.send(f"**{item_name}** 아이템을 성공적으로 버렸습니다.")
-
 
     @commands.command(name="교내상점")
     async def shop(self, ctx):
@@ -167,9 +127,47 @@ class SchoolCog(commands.Cog):
         save_data(all_data)
         await ctx.send(f"**{item_name}** 구매를 완료했습니다!")
 
+# cogs/school.py 의 SchoolCog 클래스 내부
+
+    @commands.command(name="버리기")
+    async def discard_item(self, ctx, *, item_name: str):
+        """주머니에 있는 아이템을 버립니다."""
+        all_data = load_data()
+        player_id = str(ctx.author.id)
+        player_data = all_data.get(player_id)
+        
+        if not player_data:
+            return await ctx.send("먼저 `!등록`을 진행해주세요.")
+
+        inventory = player_data.get("inventory", [])
+        if item_name not in inventory:
+            return await ctx.send(f"'{item_name}' 아이템을 가지고 있지 않습니다.")
+
+        embed = discord.Embed(
+            title="🗑️ 아이템 버리기 확인",
+            description=f"정말로 **{item_name}** 아이템을 버리시겠습니까?\n버린 아이템은 되찾을 수 없습니다.",
+            color=discord.Color.red()
+        )
+        embed.set_footer(text="동의하시면 30초 안에 '예'를 입력해주세요.")
+        await ctx.send(embed=embed)
+
+        def check(m):
+            return m.author == ctx.author and m.channel == ctx.channel and m.content.lower() == '예'
+        
+        try:
+            await self.bot.wait_for('message', check=check, timeout=30.0)
+        except asyncio.TimeoutError:
+            return await ctx.send("시간이 초과되어 아이템 버리기가 취소되었습니다.")
+
+        inventory.remove(item_name)
+        player_data["inventory"] = inventory
+        save_data(all_data)
+
+        await ctx.send(f"**{item_name}** 아이템을 성공적으로 버렸습니다.")
+
     @commands.command(name="선물")
     async def gift_item(self, ctx, target_user: discord.Member, *, item_name: str):
-        """자신의 아이템을 다른 사람에게 선물합니다."""
+        """자신의 아이템을 다른 사람에게 선물합니다. 사용법: !선물 @대상 "아이템 이름" """
         if ctx.author == target_user:
             return await ctx.send("자기 자신에게는 선물을 보낼 수 없습니다.")
             
@@ -207,21 +205,16 @@ class SchoolCog(commands.Cog):
         inventory = player_data.get("inventory", [])
         if item_name not in inventory:
             return await ctx.send(f"'{item_name}' 아이템을 가지고 있지 않습니다.")
-
-        # ▼▼▼ 여기가 수정된 부분입니다 ▼▼▼
+        
         usage_text_source = ITEM_USAGE_TEXT.get(item_name)
-
-        # 값이 리스트인지 확인
+        
         if isinstance(usage_text_source, list):
-            # 리스트라면 랜덤으로 하나 선택
             usage_text = random.choice(usage_text_source)
         else:
-            # 리스트가 아니라면 (기존 아이템들) 그대로 사용
             usage_text = usage_text_source or f"**{item_name}**을(를) 어떻게 사용해야 할지 감이 오지 않는다..."
-        # ▲▲▲ 여기가 수정된 부분입니다 ▲▲▲
 
         embed = discord.Embed(description=usage_text, color=int(player_data['color'][1:], 16))
-
+        
         if item_name not in PERMANENT_ITEMS:
             inventory.remove(item_name)
             player_data["inventory"] = inventory
