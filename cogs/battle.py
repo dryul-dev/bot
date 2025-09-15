@@ -122,9 +122,17 @@ class Battle:
     async def end_battle(self, winner_user, reason):
         if self.turn_timer: self.turn_timer.cancel()
         winner_stats = self.get_player_stats(winner_user)
+        all_data = load_data()
+        winner_id = str(winner_user.id)
+        if winner_id in all_data:
+            # school_points 키가 없으면 0으로 시작, 있으면 10 추가
+            all_data[winner_id]['school_points'] = all_data[winner_id].get('school_points', 0) + 10
+            save_data(all_data)
+            self.add_log(f"🏆 {winner_stats['name']}님이 승리하여 스쿨 포인트 10점을 획득했습니다!")
         embed = discord.Embed(title="🎉 전투 종료! 🎉", description=f"**승자: {winner_stats['name']}**\n> {reason}", color=winner_stats['color'])
         await self.channel.send(embed=embed)
-        if self.channel.id in active_battles: del active_battles[self.channel.id]
+        if self.channel.id in active_battles: 
+            del active_battles[self.channel.id]
         
     def get_coords(self, pos): return pos // 5, pos % 5
     def get_distance(self, pos1, pos2): r1, c1 = self.get_coords(pos1); r2, c2 = self.get_coords(pos2); return max(abs(r1 - r2), abs(c1 - c2))
@@ -213,6 +221,15 @@ class TeamBattle(Battle): # Battle 클래스의 기능을 상속받음
     
     async def end_battle(self, winner_team_name, winner_ids, reason):
         if self.turn_timer: self.turn_timer.cancel()
+        all_data = load_data()
+        point_log = []
+        for winner_id in winner_ids:
+            winner_id_str = str(winner_id)
+            if winner_id_str in all_data:
+                all_data[winner_id_str]['school_points'] = all_data[winner_id_str].get('school_points', 0) + 15
+                winner_name = self.players[winner_id]['name']
+                point_log.append(f"{winner_name}: +15P")
+        save_data(all_data)
         winner_representative_stats = self.players[winner_ids[0]]
         embed = discord.Embed(title=f"🎉 {winner_team_name} 승리! 🎉", description=f"> {reason}", color=winner_representative_stats['color'])
         await self.channel.send(embed=embed)

@@ -68,10 +68,19 @@ class GrowthCog(commands.Cog):
             color_msg = await self.bot.wait_for('message', check=check, timeout=60.0)
 
             all_data[player_id] = {
-                "mental": 0, "physical": 0, "challenge_type": None, "challenge_registered_today": False,
-                "registered": True, "class": player_class, "name": name_msg.content, 
-                "emoji": emoji_msg.content, "color": color_msg.content, "attribute": None,
-                "advanced_class": None
+                "mental": 0, 
+                "physical": 0, 
+                "challenge_type": None, 
+                "challenge_registered_today": False,
+                "registered": True, 
+                "class": player_class, 
+                "name": name_msg.content, 
+                "emoji": emoji_msg.content, 
+                "color": color_msg.content, 
+                "attribute": None,
+                "advanced_class": None,
+                "school_points": 0,
+                "inventory": []
             }
             save_data(all_data)
             await ctx.send("🎉 등록이 완료되었습니다!")
