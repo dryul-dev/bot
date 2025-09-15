@@ -274,7 +274,7 @@ class BattleCog(commands.Cog):
             await ctx.send("시간이 초과되어 대결이 취소되었습니다.")
             # ... !대결 명령어의 전체 코드를 여기에 붙여넣으세요 ...
             # Battle 객체를 생성할 때, 이 파일에 있는 active_battles를 사용합니다.
-            pass
+
         
     @commands.command(name="팀대결")
     async def team_battle_request(self, ctx, teammate: discord.Member, opponent1: discord.Member, opponent2: discord.Member):
@@ -302,7 +302,7 @@ class BattleCog(commands.Cog):
         battle = TeamBattle(ctx.channel, team_a, team_b)
         active_battles[ctx.channel.id] = battle
         await battle.next_turn()
-        pass
+
     
     @commands.command(name="공격")
     async def attack(self, ctx, target_user: discord.Member = None):
@@ -470,7 +470,7 @@ class BattleCog(commands.Cog):
             await battle.end_battle(attacker, f"{target['name']}의 체력이 0이 되어 전투에서 승리했습니다!")
         else:
             await battle.handle_action_cost(1)
-        pass
+
 
 
      # --- 전투 행동 명령어 ---
@@ -521,7 +521,6 @@ class BattleCog(commands.Cog):
         p_stats['pos'] = final_pos
         battle.add_log(f"🚶 {p_stats['name']}이(가) 이동했습니다.")
         await battle.handle_action_cost(1)
-        pass
 
     @commands.command(name="특수")
     async def special_ability(self, ctx):
@@ -573,7 +572,7 @@ class BattleCog(commands.Cog):
         p_stats['special_cooldown'] = 2 
         await battle.handle_action_cost(1) # 턴 전체 소모 대신 행동력 1 소모
         # ▲▲▲ 여기가 수정된 부분입니다 ▲▲▲ 
-        pass 
+
 
     @commands.command(name="스킬")
     async def use_skill(self, ctx, skill_number: int, target_user: discord.Member):
@@ -734,7 +733,7 @@ class BattleCog(commands.Cog):
         player_stats = battle.players.get(ctx.author.id) # 팀전 기준
         if not player_stats or not player_stats.get("advanced_class"):
             return await ctx.send("스킬은 상위 직업으로 전직한 플레이어만 사용할 수 있습니다.")
-        pass
+
 
      
             
@@ -754,7 +753,6 @@ class BattleCog(commands.Cog):
             await battle.end_battle(winner_stats, f"{ctx.author.display_name}님이 기권했습니다.")
         else:
             await ctx.send("당신은 이 전투의 참여자가 아닙니다.")
-            pass
 
 
 # 봇에 Cog를 추가하기 위한 필수 함수

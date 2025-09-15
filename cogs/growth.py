@@ -77,7 +77,7 @@ class GrowthCog(commands.Cog):
 
         except asyncio.TimeoutError:
             await ctx.send("시간이 초과되어 등록이 취소되었습니다.")
-        pass
+        
 
     @commands.command(name="스탯조회")
     async def check_stats(self, ctx, member: discord.Member = None):
@@ -128,7 +128,7 @@ class GrowthCog(commands.Cog):
         )
         
         await ctx.send(embed=embed)
-        pass
+   
 
     @commands.command(name="정보수정")
     async def edit_info(self, ctx, item: str, *, value: str):
@@ -171,7 +171,7 @@ class GrowthCog(commands.Cog):
         all_data[player_id][key] = value
         save_data(all_data)
         await ctx.send(f"'{item}' 정보가 '{value}' (으)로 성공적으로 변경되었습니다.")
-        pass
+
 
     @commands.command(name="리셋")
     async def reset_my_data(self, ctx):
@@ -227,7 +227,7 @@ class GrowthCog(commands.Cog):
         # 3단계: 완료 메시지 전송
         await ctx.send(f"✅ **{ctx.author.display_name}**님의 모든 데이터가 성공적으로 초기화되었습니다. `!등록` 명령어를 사용해 새로운 여정을 시작하세요!")
         """자신의 프로필 정보(직업, 이름 등)를 모두 초기화합니다. (스탯은 유지)"""
-        pass
+
 
     @commands.command(name="전직")
     async def advance_class(self, ctx):
@@ -272,7 +272,7 @@ class GrowthCog(commands.Cog):
 
         except asyncio.TimeoutError:
             await ctx.send("시간이 초과되어 전직이 취소되었습니다.")
-            pass
+
 
     @commands.command(name="정신도전")
     async def register_mental_challenge(self, ctx):
@@ -333,7 +333,7 @@ class GrowthCog(commands.Cog):
         embed.add_field(name="진행 안내", value="오후 4시 이후 `!도전완료` 명령어를 통해\n결과를 보고하고 스탯을 획득하세요!", inline=False)
         embed.set_footer(text="강인한 육체에 강인한 정신이 깃듭니다.")
         await ctx.send(embed=embed)
-        pass
+
 
     @commands.command(name="도전완료")
     async def complete_challenge(self, ctx):
@@ -379,7 +379,7 @@ class GrowthCog(commands.Cog):
 
         # `!스탯조회` 함수가 코드 내에 정의되어 있어야 합니다.
         await check_stats(ctx, member=None)
-        pass
+
 
     @commands.command(name="휴식")
     async def take_rest(self, ctx):
@@ -411,7 +411,7 @@ class GrowthCog(commands.Cog):
         embed = discord.Embed(title="🌙 편안한 휴식을 선택했습니다", description=f"**{ctx.author.display_name}**님, 오늘의 도전을 쉬고 재충전합니다.", color=discord.Color.green())
         embed.add_field(name="휴식 보너스", value="다음 전투 시작 시, 1회에 한해 **최대 체력이 증가**하는 효과를 받습니다.")
         await ctx.send(embed=embed)
-        pass
+
 
 
 # 봇에 Cog를 추가하기 위한 필수 함수
