@@ -7,6 +7,8 @@ import os
 import random
 import asyncio
 
+DATA_FILE = "player_data.json"
+
 
 # 데이터 로딩/저장 함수와 Battle/TeamBattle 클래스를 여기에 위치시킵니다.
 def load_data():
