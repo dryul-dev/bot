@@ -42,6 +42,8 @@ class PveBattle:
         self.channel = channel
         self.player_user = player_user
         self.active_battles = active_battles_ref # active_battles 딕셔너리 참조
+        self.turn_timer = None # 타이머 변수 추가
+
         
         all_data = load_data()
         player_id_str = str(player_user.id)
@@ -73,6 +75,22 @@ class PveBattle:
         }
         self.current_turn = "player"
 
+
+    async def start_turn_timer(self):
+        """턴 제한 시간 타이머를 시작/재시작합니다."""
+        if self.turn_timer:
+            self.turn_timer.cancel()
+        self.turn_timer = asyncio.create_task(self.timeout_task())
+
+    async def timeout_task(self):
+        """5분이 지나면 타임아웃으로 패배 처리합니다."""
+        try:
+            await asyncio.sleep(300) # 5분
+            await self.channel.send("사냥 시간이 너무 오래 걸려 집중력을 잃었습니다...")
+            await self.end_battle(win=False)
+        except asyncio.CancelledError:
+            pass
+
     async def end_battle(self, win):
         if self.channel.id in self.active_battles:
             del self.active_battles[self.channel.id]
@@ -99,6 +117,62 @@ class PveBattle:
             await self.channel.send(embed=embed)
         else:
             await self.channel.send("사냥에 실패했다...일단 보건실에 가자.")
+    async def monster_turn(self):
+        """몬스터의 턴을 진행합니다."""
+        await self.channel.send("--- 몬스터의 턴 ---")
+        await asyncio.sleep(1.5) # 긴장감 연출을 위한 딜레이
+
+        monster = self.monster_stats
+        player = self.player_stats
+        
+        # 행동 확률 결정
+        action_roll = random.random()
+
+        # 1. 일반 공격 (60% 확률)
+        if action_roll < 0.6:
+            damage = max(1, monster['ap'] + random.randint(-monster['level'], monster['level']))
+            # 플레이어의 방어력(PvE용)이 있다면 적용
+            final_damage = max(1, damage - player.get('pve_defense', 0))
+            player['current_hp'] = max(0, player['current_hp'] - final_damage)
+            
+            log_message = f"👹 **{monster['name']}**의 공격! **{player['name']}**에게 **{final_damage}**의 피해를 입혔습니다."
+            if player.get('pve_defense', 0) > 0:
+                log_message += f" (방어함)"
+                player['pve_defense'] = 0 # 방어력은 1회성으로 초기화
+
+        # 2. 방어 (30% 확률)
+        elif action_roll < 0.9:
+            defense_gain = round(monster['hp'] * 0.2) # 최대 체력의 20%
+            monster['defense'] = monster.get('defense', 0) + defense_gain
+            log_message = f"🛡️ **{monster['name']}**이(가) 방어 태세를 갖춥니다! (방어도 +{defense_gain})"
+
+        # 3. 강한 공격 (10% 확률)
+        else:
+            damage = max(1, monster['ap'] + random.randint(-monster['level'], monster['level'])) * 2
+            final_damage = max(1, damage - player.get('pve_defense', 0))
+            player['current_hp'] = max(0, player['current_hp'] - final_damage)
+            
+            log_message = f"💥 **{monster['name']}**의 강한 공격! **{player['name']}**에게 **{final_damage}**의 치명적인 피해를 입혔습니다!"
+            if player.get('pve_defense', 0) > 0:
+                player['pve_defense'] = 0
+
+        # 결과 알림 및 다음 턴 준비
+        embed = discord.Embed(description=log_message, color=0xDC143C)
+        await self.channel.send(embed=embed)
+        await asyncio.sleep(2)
+
+        if player['current_hp'] <= 0:
+            await self.end_battle(win=False)
+            return
+
+        # 플레이어 턴으로 전환 및 타이머 재시작
+        self.current_turn = "player"
+        embed = discord.Embed(title="▶️ 당신의 턴입니다", color=player['color'])
+        embed.add_field(name=f"{player['name']}", value=f"HP: {player['current_hp']}/{player['hp']}", inline=True)
+        embed.add_field(name=f"{monster['name']}", value=f"HP: {monster['current_hp']}/{monster['hp']}", inline=True)
+        await self.channel.send(embed=embed)
+        
+        await self.start_turn_timer()
 
 # Monster Cog 클래스
 class MonsterCog(commands.Cog):
@@ -117,7 +191,7 @@ class MonsterCog(commands.Cog):
         embed = discord.Embed(title=f"몬스터 출현! - {battle.monster_stats['name']} (Lv.{battle.monster_stats['level']})", color=0xDC143C)
         embed.add_field(name=f"{battle.player_stats['name']} (Lv.{battle.player_stats['level']})", value=f"HP: {battle.player_stats['current_hp']}/{battle.player_stats['hp']}", inline=True)
         embed.add_field(name=f"{battle.monster_stats['name']}", value=f"HP: {battle.monster_stats['current_hp']}/{battle.monster_stats['hp']}", inline=True)
-        embed.set_footer(text="당신의 턴입니다. (`!공격`, `!스킬`, `!아이템`, `!도망`)")
+        embed.set_footer(text="당신의 턴입니다. (`!공격`, `!스킬 1`, `!아이템`, `!도망`)")
         await ctx.send(embed=embed)
 
 # 봇에 Cog를 추가하기 위한 필수 함수

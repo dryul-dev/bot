@@ -132,8 +132,8 @@ class Battle:
             self.add_log(f"🏆 {winner_stats['name']}님이 승리하여 스쿨 포인트 10점을 획득했습니다!")
         embed = discord.Embed(title="🎉 전투 종료! 🎉", description=f"**승자: {winner_stats['name']}**\n> {reason}", color=winner_stats['color'])
         await self.channel.send(embed=embed)
-        if self.channel.id in active_battles: 
-            del active_battles[self.channel.id]
+        if self.channel.id in self.active_battles: 
+            del self.active_battles[self.channel.id]
         
     def get_coords(self, pos): return pos // 5, pos % 5
     def get_distance(self, pos1, pos2): r1, c1 = self.get_coords(pos1); r2, c2 = self.get_coords(pos2); return max(abs(r1 - r2), abs(c1 - c2))
@@ -234,7 +234,7 @@ class TeamBattle(Battle): # Battle 클래스의 기능을 상속받음
         winner_representative_stats = self.players[winner_ids[0]]
         embed = discord.Embed(title=f"🎉 {winner_team_name} 승리! 🎉", description=f"> {reason}", color=winner_representative_stats['color'])
         await self.channel.send(embed=embed)
-        if self.channel.id in active_battles: del active_battles[self.channel.id]
+        if self.channel.id in self.active_battles: del self.active_battles[self.channel.id]
     
     async def timeout_task(self):
         try:
@@ -246,7 +246,7 @@ class TeamBattle(Battle): # Battle 클래스의 기능을 상속받음
             await self.end_battle(winner_team_name, winner_ids, f"시간 초과로 {loser_name}님의 턴이 종료되어 상대팀이 승리했습니다.")
         except asyncio.CancelledError: pass
 
-active_battles = {} # 전투 Cog가 활성 전투를 관리
+
 
 # Cog 클래스 정의
 class BattleCog(commands.Cog):
@@ -258,7 +258,7 @@ class BattleCog(commands.Cog):
         if ctx.author == opponent:
             await ctx.send("자기 자신과는 대결할 수 없습니다.")
             return
-        if ctx.channel.id in active_battles:
+        if ctx.channel.id in self.active_battles:
             await ctx.send("이 채널에서는 이미 전투가 진행중입니다.")
             return
 
@@ -283,7 +283,7 @@ class BattleCog(commands.Cog):
             if str(reaction.emoji) == "✅":
                 await ctx.send("대결이 성사되었습니다! 전투를 시작합니다.")
                 battle = Battle(ctx.channel, ctx.author, opponent)
-                active_battles[ctx.channel.id] = battle
+                self.active_battles[ctx.channel.id] = battle
                 await battle.start_turn_timer()
                 await battle.display_board()
             else:
@@ -296,7 +296,7 @@ class BattleCog(commands.Cog):
         
     @commands.command(name="팀대결")
     async def team_battle_request(self, ctx, teammate: discord.Member, opponent1: discord.Member, opponent2: discord.Member):
-        if ctx.channel.id in active_battles: return await ctx.send("이 채널에서는 이미 전투가 진행중입니다.")
+        if ctx.channel.id in self.active_battles: return await ctx.send("이 채널에서는 이미 전투가 진행중입니다.")
         players = {ctx.author, teammate, opponent1, opponent2}
         if len(players) < 4: return await ctx.send("모든 플레이어는 서로 다른 유저여야 합니다.")
         all_data = load_data()
@@ -318,13 +318,13 @@ class BattleCog(commands.Cog):
         await ctx.send("양 팀 모두 대결을 수락했습니다! 전투를 시작합니다.")
         team_a = [ctx.author, teammate]; team_b = [opponent1, opponent2]
         battle = TeamBattle(ctx.channel, team_a, team_b)
-        active_battles[ctx.channel.id] = battle
+        self.active_battles[ctx.channel.id] = battle
         await battle.next_turn()
 
     
     @commands.command(name="공격")
     async def attack(self, ctx, target_user: discord.Member = None):
-        battle = active_battles.get(ctx.channel.id)
+        battle = self.active_battles.get(ctx.channel.id)
         if not battle: return
         
         # 1:1 대결과 팀 대결의 현재 턴 플레이어 확인 방식이 다름
@@ -471,7 +471,7 @@ class BattleCog(commands.Cog):
     
     @commands.command(name="이동")
     async def move(self, ctx, *directions):
-        battle = active_battles.get(ctx.channel.id)
+        battle = self.active_battles.get(ctx.channel.id)
         current_player_id = battle.current_turn_player.id if isinstance(battle, Battle) else battle.current_turn_player_id
         if not battle or ctx.author.id != current_player_id or battle.turn_actions_left <= 0:
             return # 아무 메시지 없이 조용히 종료하거나, delete_after로 메시지 전송
@@ -520,7 +520,7 @@ class BattleCog(commands.Cog):
 
     @commands.command(name="특수")
     async def special_ability(self, ctx):
-        battle = active_battles.get(ctx.channel.id)
+        battle = self.active_battles.get(ctx.channel.id)
         if not battle: return
 
         # (공격 명령어와 마찬가지로 isinstance로 1:1과 팀전 구분하여 처리)
@@ -846,7 +846,7 @@ class BattleCog(commands.Cog):
 
     @commands.command(name="기권")
     async def forfeit(self, ctx):
-        battle = active_battles.get(ctx.channel.id)
+        battle = self.active_battles.get(ctx.channel.id)
         if not battle: return
         
         if ctx.author.id == battle.p1_user.id or ctx.author.id == battle.p2_user.id:
