@@ -78,7 +78,7 @@ class GrowthCog(commands.Cog):
         pass
 
     @commands.command(name="스탯조회")
-    async def check_stats(ctx, member: discord.Member = None):
+    async def check_stats(self, ctx, member: discord.Member = None):
         """자신 또는 다른 플레이어의 프로필과 스탯 정보를 확인합니다."""
         
         # 멘션된 유저가 없으면, 명령어를 사용한 유저를 대상으로 설정
@@ -129,7 +129,7 @@ class GrowthCog(commands.Cog):
         pass
 
     @commands.command(name="정보수정")
-    async def edit_info(ctx, item: str, *, value: str):
+    async def edit_info(self, ctx, item: str, *, value: str):
         player_id = str(ctx.author.id)
         all_data = load_data()
         if player_id not in all_data or not all_data[player_id].get("registered", False):
@@ -172,7 +172,7 @@ class GrowthCog(commands.Cog):
         pass
 
     @commands.command(name="리셋")
-    async def reset_my_data(ctx):
+    async def reset_my_data(self, ctx):
         """자신의 모든 데이터(프로필, 스탯)를 완전히 초기화합니다."""
         
         player_id = str(ctx.author.id)
@@ -228,7 +228,7 @@ class GrowthCog(commands.Cog):
         pass
 
     @commands.command(name="전직")
-    async def advance_class(ctx):
+    async def advance_class(self, ctx):
         """5레벨 도달 시 상위 직업으로 전직합니다."""
         player_id = str(ctx.author.id)
         all_data = load_data()
@@ -273,7 +273,7 @@ class GrowthCog(commands.Cog):
             pass
 
     @commands.command(name="정신도전")
-    async def register_mental_challenge(ctx):
+    async def register_mental_challenge(self, ctx):
         """오전 6시~14시 사이에 오늘의 정신 도전을 등록합니다."""
         now_kst = datetime.now(KST).time()
         if not (time(6, 0) <= now_kst < time(14, 0)):
@@ -303,7 +303,7 @@ class GrowthCog(commands.Cog):
         pass
 
     @commands.command(name="육체도전")
-    async def register_physical_challenge(ctx):
+    async def register_physical_challenge(self, ctx):
         """오전 6시~14시 사이에 오늘의 육체 도전을 등록합니다."""
         now_kst = datetime.now(KST).time()
         if not (time(6, 0) <= now_kst < time(14, 0)):
@@ -334,7 +334,7 @@ class GrowthCog(commands.Cog):
         pass
 
     @commands.command(name="도전완료")
-    async def complete_challenge(ctx):
+    async def complete_challenge(self, ctx):
         """오후 16시~02시 사이에 등록한 도전을 완료하고 스탯을 얻습니다."""
         now_kst = datetime.now(KST)
         if not (now_kst.hour >= 16 or now_kst.hour < 2): 
@@ -380,7 +380,7 @@ class GrowthCog(commands.Cog):
         pass
 
     @commands.command(name="휴식")
-    async def take_rest(ctx):
+    async def take_rest(self, ctx):
         """오전 6시~14시 사이에 오늘의 도전을 쉬고, 다음 전투를 위한 버프를 받습니다."""
         now_kst = datetime.now(KST).time()
         if not (time(6, 0) <= now_kst < time(14, 0)):

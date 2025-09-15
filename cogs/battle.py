@@ -58,8 +58,10 @@ class Battle:
 
     def get_player_stats(self, user): return self.p1_stats if user.id == self.p1_user.id else self.p2_stats
     def get_opponent_stats(self, user): return self.p2_stats if user.id == self.p1_user.id else self.p1_stats
-    def add_log(self, message): self.battle_log.append(message)
-    if len(self.battle_log) > 5: self.battle_log.pop(0)
+    def add_log(self, message): 
+        self.battle_log.append(message)
+        if len(self.battle_log) > 5: 
+            self.battle_log.pop(0)
 
     async def display_board(self, extra_message=""):
         turn_player_stats = self.get_player_stats(self.current_turn_player)
@@ -144,7 +146,8 @@ class TeamBattle(Battle): # Battle 클래스의 기능을 상속받음
         self.players[team_b_users[1].id]['pos'] = 14
         
         self.grid = ["□"] * 15
-        for p_id, p_stats in self.players.items(): self.grid[p_stats['pos']] = p_stats['emoji']
+        for p_id, p_stats in self.players.items(): 
+            self.grid[p_stats['pos']] = p_stats['emoji']
 
         if random.random() < 0.5:
             self.turn_order = [team_a_users[0].id, team_b_users[0].id, team_a_users[1].id, team_b_users[1].id]
