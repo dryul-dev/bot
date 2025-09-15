@@ -3,6 +3,7 @@
 import discord
 from discord.ext import commands
 import json
+import asyncio
 import os
 from datetime import datetime, time, timedelta, timezone
 
@@ -43,28 +44,28 @@ class GrowthCog(commands.Cog):
 
         try:
             # 직업 선택
-            await ctx.send(f"직업을 선택해주세요. (선택 후 변경 불가)\n> `{'`, `'.join(CLASSES)}`")
-            msg = await bot.wait_for('message', check=check, timeout=60.0)
-            if msg.content not in CLASSES:
+            await ctx.send(f"직업을 선택해주세요. (선택 후 변경 불가)\n> `{'`, `'.join(self.CLASSES)}`")
+            msg = await self.bot.wait_for('message', check=check, timeout=60.0)
+            if msg.content not in self.CLASSES:
                 await ctx.send("잘못된 직업입니다. 등록을 다시 시작해주세요.")
                 return
             player_class = msg.content
             
             await ctx.send(f"**{player_class}**을(를) 선택하셨습니다. 확정하시겠습니까? (`예` 또는 `아니오`)")
-            msg = await bot.wait_for('message', check=check, timeout=30.0)
+            msg = await self.bot.wait_for('message', check=check, timeout=30.0)
             if msg.content.lower() != '예':
                 await ctx.send("등록이 취소되었습니다.")
                 return
 
             # 이름, 이모지, 색상 입력
             await ctx.send("사용할 이름을 입력해주세요.")
-            name_msg = await bot.wait_for('message', check=check, timeout=60.0)
+            name_msg = await self.bot.wait_for('message', check=check, timeout=60.0)
             
             await ctx.send("맵에서 자신을 나타낼 대표 이모지를 하나 입력해주세요.")
-            emoji_msg = await bot.wait_for('message', check=check, timeout=60.0)
+            emoji_msg = await self.bot.wait_for('message', check=check, timeout=60.0)
 
             await ctx.send("대표 색상을 HEX 코드로 입력해주세요. (예: `#FFFFFF`)")
-            color_msg = await bot.wait_for('message', check=check, timeout=60.0)
+            color_msg = await self.bot.wait_for('message', check=check, timeout=60.0)
 
             all_data[player_id] = {
                 "mental": 0, "physical": 0, "challenge_type": None, "challenge_registered_today": False,
@@ -152,25 +153,7 @@ class GrowthCog(commands.Cog):
     # ... (이전 답변의 !정신도전, !육체도전, !도전완료 코드와 동일하게 작동하므로 생략)
     # ... 필요하시면 해당 부분을 여기에 붙여넣으시면 됩니다.
 
-    # --- 플레이어 정보 및 스탯 성장 명령어 ---
-
-
-        """자신의 이름, 이모지, 컬러 정보를 수정합니다."""
-        player_id = str(ctx.author.id)
-        all_data = load_data()
-        if player_id not in all_data or not all_data[player_id].get("registered", False):
-            await ctx.send("먼저 `!등록`을 진행해주세요.")
-            return
-
-        editable_items = {"이름": "name", "이모지": "emoji", "컬러": "color"}
-        if item not in editable_items:
-            await ctx.send("수정할 수 있는 항목은 `이름`, `이모지`, `컬러` 입니다.")
-            return
-        
-        key = editable_items[item]
-        all_data[player_id][key] = value
-        save_data(all_data)
-        await ctx.send(f"'{item}' 정보가 '{value}' (으)로 성공적으로 변경되었습니다.")
+   
 
 
     @commands.command(name="리셋")
@@ -198,7 +181,7 @@ class GrowthCog(commands.Cog):
             return m.author == ctx.author and m.channel == ctx.channel and m.content == "초기화 동의"
 
         try:
-            await bot.wait_for('message', check=check, timeout=30.0)
+            await self.bot.wait_for('message', check=check, timeout=30.0)
         except asyncio.TimeoutError:
             return await ctx.send("시간이 초과되어 초기화가 취소되었습니다.")
 
@@ -247,7 +230,7 @@ class GrowthCog(commands.Cog):
             return await ctx.send(f"전직은 5레벨부터 가능합니다. (현재 레벨: {level})")
 
         base_class = player_data.get("class")
-        options = ADVANCED_CLASSES.get(base_class)
+        options = self.ADVANCED_CLASSES.get(base_class)
         if not options:
             return await ctx.send("오류: 유효하지 않은 기본 직업입니다.")
 
@@ -258,7 +241,7 @@ class GrowthCog(commands.Cog):
             return m.author == ctx.author and m.channel == ctx.channel and m.content in options.values()
 
         try:
-            msg = await bot.wait_for('message', check=check, timeout=60.0)
+            msg = await self.bot.wait_for('message', check=check, timeout=60.0)
             chosen_class = msg.content
             
             # 선택한 직업으로부터 속성 찾기
@@ -277,7 +260,7 @@ class GrowthCog(commands.Cog):
     @commands.command(name="정신도전")
     async def register_mental_challenge(self, ctx):
         """오전 6시~14시 사이에 오늘의 정신 도전을 등록합니다."""
-        now_kst = datetime.now(KST).time()
+        now_kst = datetime.now(self.KST).time()
         if not (time(6, 0) <= now_kst < time(14, 0)):
             embed = discord.Embed(title="❌ 도전 등록 실패", description=f"**도전 등록은 KST 기준 오전 6시부터 오후 2시까지만 가능합니다.**\n(현재 시간: {now_kst.strftime('%H:%M')})", color=discord.Color.red())
             await ctx.send(embed=embed)
@@ -307,7 +290,7 @@ class GrowthCog(commands.Cog):
     @commands.command(name="육체도전")
     async def register_physical_challenge(self, ctx):
         """오전 6시~14시 사이에 오늘의 육체 도전을 등록합니다."""
-        now_kst = datetime.now(KST).time()
+        now_kst = datetime.now(self.KST).time()
         if not (time(6, 0) <= now_kst < time(14, 0)):
             embed = discord.Embed(title="❌ 도전 등록 실패", description=f"**도전 등록은 KST 기준 오전 6시부터 오후 2시까지만 가능합니다.**\n(현재 시간: {now_kst.strftime('%H:%M')})", color=discord.Color.red())
             await ctx.send(embed=embed)
@@ -338,7 +321,7 @@ class GrowthCog(commands.Cog):
     @commands.command(name="도전완료")
     async def complete_challenge(self, ctx):
         """오후 16시~02시 사이에 등록한 도전을 완료하고 스탯을 얻습니다."""
-        now_kst = datetime.now(KST)
+        now_kst = datetime.now(self.KST)
         if not (now_kst.hour >= 16 or now_kst.hour < 2): 
             embed = discord.Embed(title="❌ 도전 완료 실패", description=f"**도전 완료는 KST 기준 오후 4시부터 새벽 2시까지만 가능합니다.**\n(현재 시간: {now_kst.strftime('%H:%M')})", color=discord.Color.red())
             await ctx.send(embed=embed)
@@ -378,13 +361,13 @@ class GrowthCog(commands.Cog):
         await ctx.send(embed=embed)
 
         # `!스탯조회` 함수가 코드 내에 정의되어 있어야 합니다.
-        await check_stats(ctx, member=None)
+        await self.check_stats(ctx)
 
 
     @commands.command(name="휴식")
     async def take_rest(self, ctx):
         """오전 6시~14시 사이에 오늘의 도전을 쉬고, 다음 전투를 위한 버프를 받습니다."""
-        now_kst = datetime.now(KST).time()
+        now_kst = datetime.now(self.KST).time()
         if not (time(6, 0) <= now_kst < time(14, 0)):
             embed = discord.Embed(title="❌ 휴식 선언 실패", description=f"**휴식은 KST 기준 오전 6시부터 오후 2시까지만 선택할 수 있습니다.**\n(현재 시간: {now_kst.strftime('%H:%M')})", color=discord.Color.red())
             await ctx.send(embed=embed)

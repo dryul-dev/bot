@@ -261,7 +261,7 @@ class BattleCog(commands.Cog):
             return user == opponent and str(reaction.emoji) in ["✅", "❌"]
 
         try:
-            reaction, user = await bot.wait_for('reaction_add', timeout=15.0, check=check)
+            reaction, user = await self.bot.wait_for('reaction_add', timeout=15.0, check=check)
             if str(reaction.emoji) == "✅":
                 await ctx.send("대결이 성사되었습니다! 전투를 시작합니다.")
                 battle = Battle(ctx.channel, ctx.author, opponent)
@@ -291,7 +291,7 @@ class BattleCog(commands.Cog):
         def check(reaction, user): return str(reaction.emoji) == '✅' and user.id in [opponent1.id, opponent2.id]
         try:
             while len(accepted_opponents) < 2:
-                reaction, user = await bot.wait_for('reaction_add', timeout=30.0, check=check)
+                reaction, user = await self.bot.wait_for('reaction_add', timeout=30.0, check=check)
                 if user.id not in accepted_opponents:
                     accepted_opponents.add(user.id)
                     await ctx.send(f"✅ {user.display_name}님이 대결을 수락했습니다. (남은 인원: {2-len(accepted_opponents)}명)")
@@ -418,58 +418,7 @@ class BattleCog(commands.Cog):
             await battle.end_battle(attacker, f"{target['name']}의 체력이 0이 되어 전투에서 승리했습니다!")
         else:
             await battle.handle_action_cost(1)
-        battle = active_battles.get(ctx.channel.id)
-        if not battle or ctx.author != battle.current_turn_player or battle.turn_actions_left <= 0: return
         
-        attacker = battle.get_player_stats(ctx.author)
-        target = battle.get_opponent_stats(ctx.author)
-        distance = battle.get_distance(attacker['pos'], target['pos'])
-
-        # 직업별 유효 공격 판정
-        can_attack = False
-        attack_type = ""
-        if attacker['class'] == '마법사' and 3 <= distance <= 5: can_attack, attack_type = True, "원거리"
-        elif attacker['class'] == '마검사':
-            if distance == 1: can_attack, attack_type = True, "근거리"
-            elif 2 <= distance <= 3: can_attack, attack_type = True, "원거리"
-        elif attacker['class'] == '검사' and distance == 1: can_attack, attack_type = True, "근거리"
-
-        if not can_attack:
-            return await ctx.send("❌ 공격 사거리가 아닙니다.", delete_after=10)
-            
-        # 데미지 계산
-        if attack_type == "원거리":
-            damage = attacker['mental'] + random.randint(0, attacker['physical'])
-        else: # 근거리
-            damage = attacker['physical'] + random.randint(0, attacker['mental'])
-        
-        # ▼▼▼ 여기가 수정/추가된 부분입니다 ▼▼▼
-        # 직업별 데미지 배율 적용
-        multiplier = 1.0
-        if attacker['class'] == '마법사':
-            multiplier = 1.5
-        elif attacker['class'] == '검사':
-            # 버프 횟수가 남아있는지 확인
-            if attacker.get('double_damage_buff', 0) > 0:
-                multiplier = 2.0
-                attacker['double_damage_buff'] -= 1 # 버프 횟수 1 차감
-                battle.add_log(f"🔥 {attacker['name']}의 분노의 일격! (남은 횟수: {attacker['double_damage_buff']}회)")
-            else:
-                multiplier = 1.2
-        
-        # 최종 데미지 계산 (배율 적용 및 반올림)
-        final_damage = round(damage * multiplier)
-        final_damage = max(1, final_damage) # 최소 데미지 1 보장
-        # ▲▲▲ 여기가 수정/추가된 부분입니다 ▲▲▲
-        
-        target['current_hp'] = max(0, target['current_hp'] - final_damage)
-        
-        battle.add_log(f"💥 {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해를 입혔습니다!")
-
-        if target['current_hp'] == 0:
-            await battle.end_battle(attacker, f"{target['name']}의 체력이 0이 되어 전투에서 승리했습니다!")
-        else:
-            await battle.handle_action_cost(1)
 
 
 
@@ -478,7 +427,9 @@ class BattleCog(commands.Cog):
     @commands.command(name="이동")
     async def move(self, ctx, *directions):
         battle = active_battles.get(ctx.channel.id)
-        if not battle or ctx.author != battle.current_turn_player or battle.turn_actions_left <= 0: return
+        current_player_id = battle.current_turn_player.id if isinstance(battle, Battle) else battle.current_turn_player_id
+        if not battle or ctx.author.id != current_player_id or battle.turn_actions_left <= 0:
+            return # 아무 메시지 없이 조용히 종료하거나, delete_after로 메시지 전송
 
         p_stats = battle.get_player_stats(ctx.author)
         # ▼▼▼ 여기가 수정된 부분입니다 ▼▼▼
@@ -541,7 +492,7 @@ class BattleCog(commands.Cog):
             await ctx.send(f"**텔레포트**: 이동할 위치의 번호를 입력해주세요. (1~15)\n> 가능한 위치: `{'`, `'.join(empty_cells)}`")
             def check(m): return m.author == ctx.author and m.channel == ctx.channel and m.content.isdigit() and 1 <= int(m.content) <= 15
             try:
-                msg = await bot.wait_for('message', check=check, timeout=30.0)
+                msg = await self.bot.wait_for('message', check=check, timeout=30.0)
                 target_pos = int(msg.content) - 1
                 if battle.grid[target_pos] != "□":
                     return await ctx.send("해당 위치는 비어있지 않습니다. 다시 시도해주세요.")
