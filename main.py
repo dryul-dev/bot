@@ -4,6 +4,7 @@ import discord
 from discord.ext import commands, tasks
 import asyncio
 import os
+import json
 from datetime import datetime, time, timedelta, timezone
 from config import DISCORD_TOKEN
 
@@ -14,6 +15,16 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.reactions = True
 bot = commands.Bot(command_prefix=BOT_PREFIX, intents=intents)
+bot.active_battles = {} # 봇 객체에 active_battles 딕셔너리를 저장
+
+
+def load_data():
+    if not os.path.exists("player_data.json"): return {}
+    with open("player_data.json", 'r', encoding='utf-8') as f: return json.load(f)
+
+def save_data(data):
+    with open("player_data.json", 'w', encoding='utf-8') as f: json.dump(data, f, indent=4, ensure_ascii=False)
+
 
 # 일일 초기화 태스크는 메인 파일에 두는 것이 좋습니다.
 

@@ -6,6 +6,7 @@ import json
 import os
 import random
 import asyncio
+from cogs.monster import PveBattle
 
 DATA_FILE = "player_data.json"
 
@@ -352,8 +353,35 @@ class BattleCog(commands.Cog):
                 return await ctx.send("❌ 같은 팀원이거나 유효하지 않은 대상은 공격할 수 없습니다.", delete_after=10)
         # ▲▲▲ 여기가 추가된 부분입니다 ▲▲▲
 
+        if isinstance(battle, PveBattle):
+                attacker = battle.player_stats
+                target = battle.monster_stats
 
-        if isinstance(battle, TeamBattle):
+                # 마검사 공격 방식 결정
+                if attacker['class'] == '마검사':
+                    attack_type = "근거리" if attacker['physical'] >= attacker['mental'] else "원거리"
+                else: # 그 외 직업은 기존 방식 따름
+                    attack_type = "근거리" if attacker['class'] == '검사' else "원거리"
+
+                base_damage = attacker['physical'] + random.randint(0, attacker['mental']) if attack_type == "근거리" else attacker['mental'] + random.randint(0, attacker['physical'])
+                # ... (기존 데미지 계산 로직 적용: 크리티컬, 배율, 상성 등) ...
+                final_damage = max(1, round(base_damage * multiplier) + attribute_damage) # PvE에선 방어력 제외
+
+                target['current_hp'] = max(0, target['current_hp'] - final_damage)
+                # ... (전투 로그 및 몬스터 턴 진행 로직 추가) ...
+                if target['current_hp'] <= 0:
+                    await battle.end_battle(win=True)
+                else:
+                    # 몬스터의 반격
+                    monster_damage = max(1, target['ap'] + random.randint(-target['level'], target['level']))
+                    attacker['current_hp'] = max(0, attacker['current_hp'] - monster_damage)
+                    # ... (전투 로그 및 플레이어 패배 확인) ...
+                    if attacker['current_hp'] <= 0:
+                        await battle.end_battle(win=False)
+                return
+
+
+        elif isinstance(battle, (Battle, TeamBattle)):
             attacker = battle.players[ctx.author.id]
             target = battle.players[target_user.id]
         else: # 1:1 대결
@@ -543,9 +571,47 @@ class BattleCog(commands.Cog):
 
 
     @commands.command(name="스킬")
-    async def use_skill(self, ctx, skill_number: int, target_user: discord.Member):
-        battle = active_battles.get(ctx.channel.id)
+    async def use_skill(self, ctx, skill_number: int, target_user: discord.Member = None):
+        battle = self.active_battles.get(ctx.channel.id)
         if not battle: return
+
+        # --- 턴 확인 및 기본 조건 검사 ---
+        current_player_id = None
+        attacker = None
+        actions_left = 0
+        
+        if isinstance(battle, PveBattle):
+            if battle.current_turn != "player": return await ctx.send("플레이어의 턴이 아닙니다.", delete_after=5)
+            current_player_id = battle.player_stats['id']
+            attacker = battle.player_stats
+            actions_left = 1 # PvE는 행동력 개념이 없지만, 조건 통과를 위해 1로 설정
+
+        elif isinstance(battle, (Battle, TeamBattle)):
+            current_player_id = battle.current_turn_player.id if isinstance(battle, Battle) else battle.current_turn_player_id
+            attacker = battle.players[ctx.author.id] if isinstance(battle, TeamBattle) else battle.get_player_stats(ctx.author)
+            actions_left = battle.turn_actions_left
+    
+
+        if ctx.author.id != current_player_id:
+            return await ctx.send("자신의 턴이 아닙니다.", delete_after=5)
+
+        if actions_left <= 0:
+            return await ctx.send("행동력이 없습니다.", delete_after=10)
+        if not attacker.get("advanced_class"):
+            return await ctx.send("스킬은 상위 직업으로 전직한 플레이어만 사용할 수 있습니다.")
+        if attacker.get('special_cooldown', 0) > 0:
+            return await ctx.send(f"스킬/특수 능력의 쿨타임이 {attacker['special_cooldown']}턴 남았습니다.", delete_after=10)
+
+
+
+
+
+
+
+
+
+
+
 
         # 현재 턴 플레이어 확인 및 기본 조건 검사
         current_player_id = battle.current_turn_player_id if isinstance(battle, TeamBattle) else battle.current_turn_player.id
@@ -576,140 +642,207 @@ class BattleCog(commands.Cog):
 
         advanced_class = attacker['advanced_class']
         
-        # --- 직업별 스킬 로직 구현 ---
-
-        # [마법사 전직] -------------------------------------------
-        if advanced_class == "캐스터":
-            distance = battle.get_distance(attacker['pos'], target['pos'])
-            if not (3 <= distance <= 5): return await ctx.send("❌ 원거리 공격 사거리가 아닙니다.", delete_after=10)
+    # [ PvE (몬스터 사냥) 로직 ]
+        if isinstance(battle, PveBattle):
+            if skill_number != 1:
+                return await ctx.send("사냥 중에는 1번 스킬만 사용할 수 있습니다.")
             
-            if skill_number == 1: # 크리티컬 50% 원거리 공격
+            advanced_class = attacker['advanced_class']
+
+            # 힐러/디펜더는 자신에게, 나머지는 몬스터를 타겟으로 자동 설정
+            if advanced_class in ['힐러', '디펜더']:
+                target = attacker
+            else:
+                target = battle.monster_stats
+            
+            # --- PvE 전용 1번 스킬 효과 적용 ---
+            if advanced_class == "캐스터":
                 base_damage = attacker['mental'] + random.randint(0, attacker['physical'])
                 multiplier = 2.0 if random.random() < 0.5 else 1.5
-                if multiplier == 2.0: battle.add_log(f"💥 캐스터의 주문이 치명타로 적중!")
-                final_damage = max(1, round(base_damage * multiplier) - target.get('defense', 0))
+                final_damage = max(1, round(base_damage * multiplier))
                 target['current_hp'] = max(0, target['current_hp'] - final_damage)
-                battle.add_log(f"☄️ {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해를 입혔습니다!")
-
-            elif skill_number == 2: # 대상 이동력 -1
-                target.setdefault('effects', {})['mobility_modifier'] = -1
-                battle.add_log(f"🌀 {attacker['name']}이(가) {target['name']}의 다음 턴 이동력을 1 감소시켰습니다!")
-
-            elif skill_number == 3: # 3배 데미지 버프 (20% 확률)
-                if random.random() < 0.20:
-                    attacker.setdefault('effects', {})['next_attack_multiplier'] = 3.0
-                    battle.add_log(f"✨ {attacker['name']}이(가) 주문 영창에 성공! 다음 공격 데미지가 3배가 됩니다!")
-                else:
-                    battle.add_log(f"💨 {attacker['name']}의 주문 영창이 실패했습니다...")
-            else: return await ctx.send("잘못된 스킬 번호입니다.", delete_after=10)
-
-        elif advanced_class == "힐러":
-            if skill_number == 1: # 체력 40% 회복
-                heal_amount = round(target['max_hp'] * 0.4)
-                target['current_hp'] = min(target['max_hp'], target['current_hp'] + heal_amount)
-                battle.add_log(f"💖 {attacker['name']}이(가) {target['name']}의 체력을 {heal_amount}만큼 회복시켰습니다!")
-
-            elif skill_number == 2: # 대상 이동력 +1
-                target.setdefault('effects', {})['mobility_modifier'] = 1
-                battle.add_log(f"🍃 {attacker['name']}이(가) {target['name']}의 다음 턴 이동력을 1 증가시켰습니다!")
-            else: return await ctx.send("잘못된 스킬 번호입니다.", delete_after=10)
-
-        # [마검사 전직] -------------------------------------------
-        elif advanced_class == "헌터":
-            if skill_number == 1: # 크리티컬 50% 근거리 공격
-                if battle.get_distance(attacker['pos'], target['pos']) != 1: return await ctx.send("❌ 근거리 공격 사거리가 아닙니다.", delete_after=10)
+                battle.add_log(f"☄️ {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해!")
+            
+            elif advanced_class == "힐러":
+                heal_amount = round(attacker['hp'] * 0.4)
+                attacker['current_hp'] = min(attacker['hp'], attacker['current_hp'] + heal_amount)
+                battle.add_log(f"💖 {attacker['name']}이(가) 자신의 체력을 {heal_amount}만큼 회복!")
+            
+            elif advanced_class == "헌터":
                 base_damage = attacker['physical'] + random.randint(0, attacker['mental'])
                 multiplier = 2.0 if random.random() < 0.5 else 1.0
-                if multiplier == 2.0: battle.add_log(f"💥 헌터의 일격이 치명타로 적중!")
-                final_damage = max(1, round(base_damage * multiplier) - target.get('defense', 0))
+                final_damage = max(1, round(base_damage * multiplier))
                 target['current_hp'] = max(0, target['current_hp'] - final_damage)
-                battle.add_log(f"🔪 {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해를 입혔습니다!")
-                
-            elif skill_number == 2: # 원거리 공격 + 방어 초기화
-                if not (2 <= battle.get_distance(attacker['pos'], target['pos']) <= 3): return await ctx.send("❌ 원거리 공격 사거리가 아닙니다.", delete_after=10)
-                base_damage = attacker['mental'] + random.randint(0, attacker['physical'])
-                final_damage = max(1, round(base_damage) - target.get('defense', 0))
-                target['current_hp'] = max(0, target['current_hp'] - final_damage)
-                target['defense'] = 0
-                battle.add_log(f"🏹 {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해를 입히고 방어도를 초기화했습니다!")
-            else: return await ctx.send("잘못된 스킬 번호입니다.", delete_after=10)
+                battle.add_log(f"🔪 {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해!")
 
-        elif advanced_class == "조커":
-            advantages = {'Wit': 'Gut', 'Gut': 'Heart', 'Heart': 'Wit'}
-            if skill_number == 1: # 상성 우위 시 추가 데미지
-                if not (2 <= battle.get_distance(attacker['pos'], target['pos']) <= 3): return await ctx.send("❌ 원거리 공격 사거리가 아닙니다.", delete_after=10)
+            elif advanced_class == "조커": # 상성 우위 시 추가 데미지
                 base_damage = attacker['mental'] + random.randint(0, attacker['physical'])
                 bonus_damage = 0
-                if advantages.get(attacker['attribute']) == target.get('attribute'):
+                
+                # 조커(Wit)가 고블린(Gut) 등 거트 속성 몬스터를 공격할 때
+                if target['attribute'] == 'Gut':
                     bonus_damage = target['level'] * 2
                     battle.add_log(f"🃏 조커의 속임수! 상성 우위로 추가 데미지 +{bonus_damage}!")
-                final_damage = max(1, round(base_damage) + bonus_damage - target.get('defense', 0))
+
+                final_damage = max(1, round(base_damage) + bonus_damage)
                 target['current_hp'] = max(0, target['current_hp'] - final_damage)
                 battle.add_log(f"🎯 {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해를 입혔습니다!")
 
-            elif skill_number == 2: # 상성 불리 시 자신에게 방어 부여
-                if advantages.get(target.get('attribute')) == attacker.get('attribute'):
-                    defense_gain = attacker['level'] * 2
-                    attacker['defense'] += defense_gain
-                    battle.add_log(f"🛡️ 조커가 상성 불리를 예측하고 자신에게 방어도 **{defense_gain}**을 부여합니다!")
-                else:
-                    battle.add_log(f"…{attacker['name']}이(가) 스킬을 사용했지만 아무 효과도 없었다.")
-            else: return await ctx.send("잘못된 스킬 번호입니다.", delete_after=10)
-
-        # [검사 전직] -------------------------------------------
-        elif advanced_class == "워리어":
-            if skill_number == 1: # 크리티컬 100% 근거리 공격
-                if battle.get_distance(attacker['pos'], target['pos']) != 1: return await ctx.send("❌ 근거리 공격 사거리가 아닙니다.", delete_after=10)
+            elif advanced_class == "워리어":
                 base_damage = attacker['physical'] + random.randint(0, attacker['mental'])
                 multiplier = 2.0
-                battle.add_log(f"‼️ 워리어의 필살의 일격!")
-                final_damage = max(1, round(base_damage * multiplier) - target.get('defense', 0))
+                final_damage = max(1, round(base_damage * multiplier))
                 target['current_hp'] = max(0, target['current_hp'] - final_damage)
-                battle.add_log(f"⚔️ {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해를 입혔습니다!")
+                battle.add_log(f"⚔️ {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해!")
 
-            elif skill_number == 2: # 대상 행동 횟수 감소
-                target.setdefault('effects', {})['action_point_modifier'] = -1
-                battle.add_log(f"⛓️ {attacker['name']}이(가) {target['name']}의 다음 턴 행동 횟수를 1회 감소시켰습니다!")
-            else: return await ctx.send("잘못된 스킬 번호입니다.", delete_after=10)
-
-        elif advanced_class == "디펜더":
-            if skill_number == 1: # 대상에게 방어 부여
+            elif advanced_class == "디펜더":
+                # PvE에서 방어력 개념을 추가해야 함 (예: battle.player_stats['defense'] += defense_gain)
                 defense_gain = attacker['level'] * 4
-                target['defense'] += defense_gain
-                battle.add_log(f"🛡️ {attacker['name']}이(가) {target['name']}에게 방어도 **{defense_gain}**을 부여합니다!")
+                battle.add_log(f"🛡️ {attacker['name']}이(가) 자신에게 방어 태세를 갖춰 다음 피해를 흡수합니다!")
+            
+            # (조커 1번 스킬 등 PvE에서 사용하기 어려운 스킬은 생략)
 
-            elif skill_number == 2: # 대상 행동 횟수 증가
-                target.setdefault('effects', {})['action_point_modifier'] = 1
-                battle.add_log(f"🏃 {attacker['name']}이(가) {target['name']}의 다음 턴 행동 횟수를 1회 증가시켜 총 3회가 되었습니다!")
-            else: return await ctx.send("잘못된 스킬 번호입니다.", delete_after=10)
-
-
-        # --- 스킬 사용 후 공통 처리 ---
-        attacker['special_cooldown'] = 2 # 특수/스킬 쿨다운은 공유
-        await battle.handle_action_cost(1) # 행동력 1 소모
+            # 스킬 사용 후 처리
+            attacker['special_cooldown'] = 2
+            
+            if battle.monster_stats['current_hp'] <= 0:
+                await battle.end_battle(win=True)
+            else:
+                # PveBattle 클래스에 monster_turn 함수가 구현되어 있어야 합니다.
+                await battle.monster_turn() 
+            return
         
+            
+        elif isinstance(battle, (Battle, TeamBattle)):
+            if not target_user:
+                return await ctx.send("PvP에서는 스킬 대상을 `@멘션`으로 지정해야 합니다.")
+            
+            target_id = target_user.id
+            if isinstance(battle, TeamBattle):
+                target = battle.players.get(target_id)
+            else: # 1:1 대결
+                target = battle.get_player_stats(target_user) if target_id in [battle.p1_user.id, battle.p2_user.id] else None
+            
+            if not target:
+                return await ctx.send("유효하지 않은 대상입니다.", delete_after=10)
+            
+            advanced_class = attacker['advanced_class']
+
+
+            if advanced_class == "캐스터":
+                distance = battle.get_distance(attacker['pos'], target['pos'])
+                if not (3 <= distance <= 5): return await ctx.send("❌ 원거리 공격 사거리가 아닙니다.", delete_after=10)
+                
+                if skill_number == 1: # 크리티컬 50% 원거리 공격
+                    base_damage = attacker['mental'] + random.randint(0, attacker['physical'])
+                    multiplier = 2.0 if random.random() < 0.5 else 1.5
+                    if multiplier == 2.0: battle.add_log(f"💥 캐스터의 주문이 치명타로 적중!")
+                    final_damage = max(1, round(base_damage * multiplier) - target.get('defense', 0))
+                    target['current_hp'] = max(0, target['current_hp'] - final_damage)
+                    battle.add_log(f"☄️ {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해를 입혔습니다!")
+
+                elif skill_number == 2: # 대상 이동력 -1
+                    target.setdefault('effects', {})['mobility_modifier'] = -1
+                    battle.add_log(f"🌀 {attacker['name']}이(가) {target['name']}의 다음 턴 이동력을 1 감소시켰습니다!")
+
+                elif skill_number == 3: # 3배 데미지 버프 (20% 확률)
+                    if random.random() < 0.20:
+                        attacker.setdefault('effects', {})['next_attack_multiplier'] = 3.0
+                        battle.add_log(f"✨ {attacker['name']}이(가) 주문 영창에 성공! 다음 공격 데미지가 3배가 됩니다!")
+                    else:
+                        battle.add_log(f"💨 {attacker['name']}의 주문 영창이 실패했습니다...")
+                else: return await ctx.send("잘못된 스킬 번호입니다.", delete_after=10)
+
+            elif advanced_class == "힐러":
+                if skill_number == 1: # 체력 40% 회복
+                    heal_amount = round(target['max_hp'] * 0.4)
+                    target['current_hp'] = min(target['max_hp'], target['current_hp'] + heal_amount)
+                    battle.add_log(f"💖 {attacker['name']}이(가) {target['name']}의 체력을 {heal_amount}만큼 회복시켰습니다!")
+
+                elif skill_number == 2: # 대상 이동력 +1
+                    target.setdefault('effects', {})['mobility_modifier'] = 1
+                    battle.add_log(f"🍃 {attacker['name']}이(가) {target['name']}의 다음 턴 이동력을 1 증가시켰습니다!")
+                else: return await ctx.send("잘못된 스킬 번호입니다.", delete_after=10)
+
+            # [마검사 전직] -------------------------------------------
+            elif advanced_class == "헌터":
+                if skill_number == 1: # 크리티컬 50% 근거리 공격
+                    if battle.get_distance(attacker['pos'], target['pos']) != 1: return await ctx.send("❌ 근거리 공격 사거리가 아닙니다.", delete_after=10)
+                    base_damage = attacker['physical'] + random.randint(0, attacker['mental'])
+                    multiplier = 2.0 if random.random() < 0.5 else 1.0
+                    if multiplier == 2.0: battle.add_log(f"💥 헌터의 일격이 치명타로 적중!")
+                    final_damage = max(1, round(base_damage * multiplier) - target.get('defense', 0))
+                    target['current_hp'] = max(0, target['current_hp'] - final_damage)
+                    battle.add_log(f"🔪 {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해를 입혔습니다!")
+                    
+                elif skill_number == 2: # 원거리 공격 + 방어 초기화
+                    if not (2 <= battle.get_distance(attacker['pos'], target['pos']) <= 3): return await ctx.send("❌ 원거리 공격 사거리가 아닙니다.", delete_after=10)
+                    base_damage = attacker['mental'] + random.randint(0, attacker['physical'])
+                    final_damage = max(1, round(base_damage) - target.get('defense', 0))
+                    target['current_hp'] = max(0, target['current_hp'] - final_damage)
+                    target['defense'] = 0
+                    battle.add_log(f"🏹 {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해를 입히고 방어도를 초기화했습니다!")
+                else: return await ctx.send("잘못된 스킬 번호입니다.", delete_after=10)
+
+            elif advanced_class == "조커":
+                advantages = {'Wit': 'Gut', 'Gut': 'Heart', 'Heart': 'Wit'}
+                if skill_number == 1: # 상성 우위 시 추가 데미지
+                    if not (2 <= battle.get_distance(attacker['pos'], target['pos']) <= 3): return await ctx.send("❌ 원거리 공격 사거리가 아닙니다.", delete_after=10)
+                    base_damage = attacker['mental'] + random.randint(0, attacker['physical'])
+                    bonus_damage = 0
+                    if advantages.get(attacker['attribute']) == target.get('attribute'):
+                        bonus_damage = target['level'] * 2
+                        battle.add_log(f"🃏 조커의 속임수! 상성 우위로 추가 데미지 +{bonus_damage}!")
+                    final_damage = max(1, round(base_damage) + bonus_damage - target.get('defense', 0))
+                    target['current_hp'] = max(0, target['current_hp'] - final_damage)
+                    battle.add_log(f"🎯 {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해를 입혔습니다!")
+
+                elif skill_number == 2: # 상성 불리 시 자신에게 방어 부여
+                    if advantages.get(target.get('attribute')) == attacker.get('attribute'):
+                        defense_gain = attacker['level'] * 2
+                        attacker['defense'] += defense_gain
+                        battle.add_log(f"🛡️ 조커가 상성 불리를 예측하고 자신에게 방어도 **{defense_gain}**을 부여합니다!")
+                    else:
+                        battle.add_log(f"…{attacker['name']}이(가) 스킬을 사용했지만 아무 효과도 없었다.")
+                else: return await ctx.send("잘못된 스킬 번호입니다.", delete_after=10)
+
+            # [검사 전직] -------------------------------------------
+            elif advanced_class == "워리어":
+                if skill_number == 1: # 크리티컬 100% 근거리 공격
+                    if battle.get_distance(attacker['pos'], target['pos']) != 1: return await ctx.send("❌ 근거리 공격 사거리가 아닙니다.", delete_after=10)
+                    base_damage = attacker['physical'] + random.randint(0, attacker['mental'])
+                    multiplier = 2.0
+                    battle.add_log(f"‼️ 워리어의 필살의 일격!")
+                    final_damage = max(1, round(base_damage * multiplier) - target.get('defense', 0))
+                    target['current_hp'] = max(0, target['current_hp'] - final_damage)
+                    battle.add_log(f"⚔️ {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해를 입혔습니다!")
+
+                elif skill_number == 2: # 대상 행동 횟수 감소
+                    target.setdefault('effects', {})['action_point_modifier'] = -1
+                    battle.add_log(f"⛓️ {attacker['name']}이(가) {target['name']}의 다음 턴 행동 횟수를 1회 감소시켰습니다!")
+                else: return await ctx.send("잘못된 스킬 번호입니다.", delete_after=10)
+
+            elif advanced_class == "디펜더":
+                if skill_number == 1: # 대상에게 방어 부여
+                    defense_gain = attacker['level'] * 4
+                    target['defense'] += defense_gain
+                    battle.add_log(f"🛡️ {attacker['name']}이(가) {target['name']}에게 방어도 **{defense_gain}**을 부여합니다!")
+
+                elif skill_number == 2: # 대상 행동 횟수 증가
+                    target.setdefault('effects', {})['action_point_modifier'] = 1
+                    battle.add_log(f"🏃 {attacker['name']}이(가) {target['name']}의 다음 턴 행동 횟수를 1회 증가시켜 총 3회가 되었습니다!")
+                else: return await ctx.send("잘못된 스킬 번호입니다.", delete_after=10)
+
+        attacker['special_cooldown'] = 2
+        await battle.handle_action_cost(1)
+
         # 공격 스킬로 인해 게임이 끝났는지 확인
         if isinstance(battle, TeamBattle):
             await battle.check_game_over()
-        elif target['current_hp'] <= 0: # 1:1 대결
-            await battle.end_battle(attacker, f"{target['name']}의 체력이 0이 되어 전투에서 승리했습니다!")
-        battle = active_battles.get(ctx.channel.id)
-        if not battle: return
-
-        # (isinstance로 1:1과 팀전 구분하여 처리)
-        
-        player_stats = battle.players.get(ctx.author.id) # 팀전 기준
-        if not player_stats or not player_stats.get("advanced_class"):
-            return await ctx.send("스킬은 상위 직업으로 전직한 플레이어만 사용할 수 있습니다.")
-
-
-     
-            
-        # ... (다른 직업들의 스킬 로직도 위와 같은 방식으로 추가) ...
-
-        # --- 스킬 사용 후 공통 처리 ---
-        attacker['special_cooldown'] = 2
-        await battle.handle_action_cost(1)
+        elif target['current_hp'] <= 0:
+            await battle.end_battle(ctx.author, f"{target['name']}이(가) 스킬에 맞아 쓰러졌습니다!")
+        return
+      
 
     @commands.command(name="기권")
     async def forfeit(self, ctx):
