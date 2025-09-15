@@ -3,6 +3,7 @@
 import discord
 from discord.ext import commands, tasks
 import asyncio
+import os
 from datetime import datetime, time, timedelta, timezone
 from config import DISCORD_TOKEN
 
