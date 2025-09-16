@@ -159,10 +159,7 @@ class RoleplayCog(commands.Cog):
         # 결과 메시지 생성
         embed = discord.Embed(
             title="🎲 주사위 굴림 결과",
-            description=f"**{ctx.author.display_name}**님이 **{sides}**면체 주사위 **{rolls}**개를 굴립니다...",
-            color=discord.Color.dark_red()
         )
-        embed.add_field(name="결과", value=f"`{', '.join(map(str, results))}`", inline=False)
         embed.add_field(name="🎲 총합", value=f"**{total}**", inline=False)
         
         await ctx.send(embed=embed)
