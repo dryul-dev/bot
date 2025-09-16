@@ -21,11 +21,16 @@ MONSTER_DATA = {
 
 class PveBattle:
     def __init__(self, channel, player_user, active_battles_ref):
+
+        
         self.channel = channel
         self.player_user = player_user
         self.active_battles = active_battles_ref
         self.turn_timer = None
         self.battle_type = "pve"
+        self.battle_log = ["사냥을 시작합니다!"]
+
+
         
         all_data = load_data()
         player_data = all_data.get(str(player_user.id), {})
@@ -55,6 +60,10 @@ class PveBattle:
             "drops": monster_template['drops']
         }
         self.current_turn = "player"
+    def add_log(self, message):
+        self.battle_log.append(message)
+        if len(self.battle_log) > 5:
+            self.battle_log.pop(0)
     async def start_turn_timer(self):
         if self.turn_timer: self.turn_timer.cancel()
         self.turn_timer = asyncio.create_task(self.timeout_task())
