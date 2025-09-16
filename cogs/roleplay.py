@@ -160,7 +160,7 @@ class RoleplayCog(commands.Cog):
         embed = discord.Embed(
             title="🎲 주사위 굴림 결과",
         )
-        embed.add_field(name="🎲 총합", value=f"**{total}**", inline=False)
+        embed.add_field(value=f"**{total}**", inline=False)
         
         await ctx.send(embed=embed)
 
