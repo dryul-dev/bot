@@ -260,198 +260,8 @@ class BattleCog(commands.Cog):
             
         except asyncio.TimeoutError: 
             return await ctx.send("시간이 초과되어 대결이 취소되었습니다.")
-
-    
-
-async def setup(bot):
-    await bot.add_cog(BattleCog(bot))
-
-
-
-
-
-
-'''
-
-import discord
-from discord.ext import commands
-import json
-import os
-import random
-import asyncio
-from cogs.monster import PveBattle # monsterCog의 PveBattle 클래스를 사용하기 위해 import
-
-DATA_FILE = "player_data.json"
-
-def load_data():
-    if not os.path.exists(DATA_FILE): return {}
-    with open(DATA_FILE, 'r', encoding='utf-8') as f: return json.load(f)
-
-def save_data(data):
-    with open(DATA_FILE, 'w', encoding='utf-8') as f: json.dump(data, f, indent=4, ensure_ascii=False)
-
-# --- 1:1 전투 관리 클래스 ---
-class Battle:
-    def __init__(self, channel, player1, player2, active_battles_ref):
-        self.channel = channel
-        self.active_battles = active_battles_ref
-        self.p1_user = player1
-        self.p2_user = player2
-        self.battle_type = "pvp_1v1"
-        self.grid = ["□"] * 15
-        self.turn_timer = None
-        self.battle_log = ["전투가 시작되었습니다!"]
-        all_data = load_data()
-        self.p1_stats = self._setup_player_stats(all_data, self.p1_user)
-        self.p2_stats = self._setup_player_stats(all_data, self.p2_user)
-        positions = random.sample([0, 14], 2)
-        self.p1_stats['pos'] = positions[0]; self.p2_stats['pos'] = positions[1]
-        self.grid[self.p1_stats['pos']] = self.p1_stats['emoji']
-        self.grid[self.p2_stats['pos']] = self.p2_stats['emoji']
-        self.current_turn_player = random.choice([self.p1_user, self.p2_user])
-        self.turn_actions_left = 2
-
-    def _setup_player_stats(self, all_data, user):
-        player_id = str(user.id); base_stats = all_data[player_id]
-        level = 1 + ((base_stats['mental'] + base_stats['physical']) // 5)
-        max_hp = max(1, level * 10 + base_stats['physical'])
-        if base_stats.get("rest_buff_active", False):
-            hp_buff = level * 5; max_hp += hp_buff
-            self.add_log(f"🌙 {base_stats['name']}이(가) 휴식 효과로 최대 체력이 {hp_buff} 증가합니다!")
-            all_data[player_id]["rest_buff_active"] = False; save_data(all_data)
-        return {"id": user.id, "name": base_stats['name'], "emoji": base_stats['emoji'], "class": base_stats['class'], "attribute": base_stats.get("attribute"), "advanced_class": base_stats.get("advanced_class"), "defense": 0, "effects": {}, "color": int(base_stats['color'][1:], 16), "mental": base_stats['mental'], "physical": base_stats['physical'], "level": level, "max_hp": max_hp, "current_hp": max_hp, "pos": -1, "special_cooldown": 0, "double_damage_buff": 0}
-
-    def get_player_stats(self, user):
-        return self.p1_stats if user.id == self.p1_user.id else self.p2_stats
-
-    def get_opponent_stats(self, user):
-        return self.p2_stats if user.id == self.p1_user.id else self.p1_stats
-
-    def add_log(self, message):
-        self.battle_log.append(message)
-        if len(self.battle_log) > 5:
-            self.battle_log.pop(0)
-
-    async def display_board(self, extra_message=""):
-        turn_player_stats = self.get_player_stats(self.current_turn_player)
-        embed = discord.Embed(title="⚔️ 1:1 대결 진행중 ⚔️", description=f"**현재 턴: {turn_player_stats['name']}**", color=turn_player_stats['color'])
-        grid_str = "".join([f" `{cell}` " + ("\n" if (i + 1) % 5 == 0 else "") for i, cell in enumerate(self.grid)])
-        embed.add_field(name="[ 전투 맵 ]", value=grid_str, inline=False)
-        for p_stats in [self.p1_stats, self.p2_stats]:
-            embed.add_field(name=f"{p_stats['emoji']} {p_stats['name']} ({p_stats.get('advanced_class') or p_stats['class']})", value=f"**HP: {p_stats['current_hp']} / {p_stats['max_hp']}**", inline=True)
-        embed.add_field(name="남은 행동", value=f"{self.turn_actions_left}회", inline=False)
-        embed.add_field(name="📜 전투 로그", value="\n".join(self.battle_log), inline=False)
-        if extra_message: embed.set_footer(text=extra_message)
-        await self.channel.send(embed=embed)
-
-    async def handle_action_cost(self, cost=1):
-        self.turn_actions_left -= cost
-        if self.turn_actions_left <= 0:
-            await self.display_board("행동력을 모두 소모하여 턴을 종료합니다."); await asyncio.sleep(2); await self.next_turn()
-        else: await self.display_board()
-
-    async def next_turn(self):
-        p_stats = self.get_player_stats(self.current_turn_player)
-        if p_stats['special_cooldown'] > 0: p_stats['special_cooldown'] -= 1
-        self.current_turn_player = self.p2_user if self.current_turn_player.id == self.p1_user.id else self.p1_user
-        self.turn_actions_left = 2
-        next_p_stats = self.get_player_stats(self.current_turn_player); effects = next_p_stats.get('effects', {})
-        if 'action_point_modifier' in effects:
-            self.turn_actions_left += effects['action_point_modifier']; self.add_log(f"⏱️ 효과로 인해 {next_p_stats['name']}의 행동 횟수가 조정됩니다!")
-        next_p_stats['effects'] = {}
-        self.add_log(f"▶️ {next_p_stats['name']}의 턴입니다."); await self.start_turn_timer(); await self.display_board()
-
-    async def start_turn_timer(self):
-        if self.turn_timer: self.turn_timer.cancel()
-        self.turn_timer = asyncio.create_task(self.timeout_task())
-    async def timeout_task(self):
-        try:
-            await asyncio.sleep(300)
-            winner = self.get_opponent_stats(self.current_turn_player); loser = self.get_player_stats(self.current_turn_player)
-            await self.end_battle(winner, f"시간 초과로 {loser['name']}님이 패배했습니다.")
-            if self.channel.id in self.active_battles: del self.active_battles[self.channel.id]
-        except asyncio.CancelledError: pass
-
-    async def end_battle(self, winner_user, reason):
-        if self.turn_timer: self.turn_timer.cancel()
-        winner_stats = self.get_player_stats(winner_user)
-        all_data = load_data(); winner_id = str(winner_user.id)
-        if winner_id in all_data:
-            all_data[winner_id]['school_points'] = all_data[winner_id].get('school_points', 0) + 10; save_data(all_data)
-        embed = discord.Embed(title="🎉 전투 종료! 🎉", description=f"**승자: {winner_stats['name']}**\n> {reason}\n\n**획득: 10 스쿨 포인트**", color=winner_stats['color'])
-        await self.channel.send(embed=embed)
         
-    def get_coords(self, pos): return pos // 5, pos % 5
-    def get_distance(self, pos1, pos2): r1, c1 = self.get_coords(pos1); r2, c2 = self.get_coords(pos2); return max(abs(r1 - r2), abs(c1 - c2))
-
-# --- 팀 전투 관리 클래스 ---
-class TeamBattle(Battle):
-    def __init__(self, channel, team_a_users, team_b_users, active_battles_ref):
-        self.channel = channel; self.active_battles = active_battles_ref; self.players = {}; self.battle_log = ["팀 전투가 시작되었습니다!"]; self.battle_type = "pvp_team"
-        self.team_a_ids = [p.id for p in team_a_users]; self.team_b_ids = [p.id for p in team_b_users]
-        all_data = load_data()
-        for player_user in team_a_users + team_b_users: self.players[player_user.id] = self._setup_player_stats(all_data, player_user)
-        self.players[team_a_users[0].id]['pos'] = 0; self.players[team_a_users[1].id]['pos'] = 10
-        self.players[team_b_users[0].id]['pos'] = 4; self.players[team_b_users[1].id]['pos'] = 14
-        self.grid = ["□"] * 15
-        for p_id, p_stats in self.players.items(): self.grid[p_stats['pos']] = p_stats['emoji']
-        if random.random() < 0.5: self.turn_order = [team_a_users[0].id, team_b_users[0].id, team_a_users[1].id, team_b_users[1].id]; self.add_log("▶️ A팀이 선공입니다!")
-        else: self.turn_order = [team_b_users[0].id, team_a_users[0].id, team_b_users[1].id, team_a_users[1].id]; self.add_log("▶️ B팀이 선공입니다!")
-        self.turn_index = -1; self.current_turn_player_id = None; self.turn_actions_left = 2; self.turn_timer = None
-    
-    async def next_turn(self):
-        self.turn_index = (self.turn_index + 1) % 4
-        next_player_id = self.turn_order[self.turn_index]
-        if self.players[next_player_id]['current_hp'] <= 0:
-            self.add_log(f"↪️ {self.players[next_player_id]['name']}님은 리타이어하여 턴을 건너뜁니다."); await self.display_board(); await asyncio.sleep(1.5); await self.next_turn(); return
-        self.current_turn_player_id = next_player_id; self.turn_actions_left = 2
-        current_player_stats = self.players[self.current_turn_player_id]; effects = current_player_stats.get('effects', {})
-        if 'action_point_modifier' in effects:
-            self.turn_actions_left += effects['action_point_modifier']; self.add_log(f"⏱️ 효과로 인해 {current_player_stats['name']}의 행동 횟수가 조정됩니다!")
-        current_player_stats['effects'] = {}
-        if current_player_stats['special_cooldown'] > 0: current_player_stats['special_cooldown'] -= 1
-        self.add_log(f"▶️ {current_player_stats['name']}의 턴입니다."); await self.start_turn_timer(); await self.display_board()
-
-    async def display_board(self, extra_message=""):
-        turn_player_stats = self.players[self.current_turn_player_id]
-        embed = discord.Embed(title="⚔️ 팀 대결 진행중 ⚔️", description=f"**현재 턴: {turn_player_stats['name']}**", color=turn_player_stats['color'])
-        grid_str = "".join([f" `{cell}` " + ("\n" if (i + 1) % 5 == 0 else "") for i, cell in enumerate(self.grid)])
-        embed.add_field(name="[ 전투 맵 ]", value=grid_str, inline=False)
-        team_a_leader, team_a_member = self.players[self.team_a_ids[0]], self.players[self.team_a_ids[1]]
-        team_b_leader, team_b_member = self.players[self.team_b_ids[0]], self.players[self.team_b_ids[1]]
-        embed.add_field(name=f"A팀: {team_a_leader['name']} & {team_a_member['name']}", value=f"{team_a_leader['emoji']} HP: **{team_a_leader['current_hp']}/{team_a_leader['max_hp']}**\n{team_a_member['emoji']} HP: **{team_a_member['current_hp']}/{team_a_member['max_hp']}**", inline=True)
-        embed.add_field(name=f"B팀: {team_b_leader['name']} & {team_b_member['name']}", value=f"{team_b_leader['emoji']} HP: **{team_b_leader['current_hp']}/{team_b_leader['max_hp']}**\n{team_b_member['emoji']} HP: **{team_b_member['current_hp']}/{team_b_member['max_hp']}**", inline=True)
-        embed.add_field(name="남은 행동", value=f"{self.turn_actions_left}회", inline=False)
-        embed.add_field(name="📜 전투 로그", value="\n".join(self.battle_log), inline=False)
-        if extra_message: embed.set_footer(text=extra_message)
-        await self.channel.send(embed=embed)
-
-    async def check_game_over(self):
-        team_a_alive = any(self.players[pid]['current_hp'] > 0 for pid in self.team_a_ids)
-        team_b_alive = any(self.players[pid]['current_hp'] > 0 for pid in self.team_b_ids)
-        if not team_a_alive: await self.end_battle("B팀", self.team_b_ids, "A팀이 전멸하여 B팀이 승리했습니다!"); return True
-        if not team_b_alive: await self.end_battle("A팀", self.team_a_ids, "B팀이 전멸하여 A팀이 승리했습니다!"); return True
-        return False
-    
-    async def end_battle(self, winner_team_name, winner_ids, reason):
-        if self.turn_timer: self.turn_timer.cancel()
-        all_data = load_data(); point_log = []
-        for winner_id in winner_ids:
-            winner_id_str = str(winner_id)
-            if winner_id_str in all_data:
-                all_data[winner_id_str]['school_points'] = all_data[winner_id_str].get('school_points', 0) + 15
-                winner_name = self.players[winner_id]['name']; point_log.append(f"{winner_name}: +15P")
-        save_data(all_data)
-        winner_representative_stats = self.players[winner_ids[0]]
-        embed = discord.Embed(title=f"🎉 {winner_team_name} 승리! 🎉", description=f"> {reason}\n\n**획득: 15 스쿨 포인트**\n" + "\n".join(point_log), color=winner_representative_stats['color'])
-        await self.channel.send(embed=embed)
-
-# --- BattleCog 클래스 ---
-class BattleCog(commands.Cog):
-    def __init__(self, bot):
-        self.bot = bot
-        self.active_battles = bot.active_battles
-
+        # 헬퍼 함수
     async def get_current_player_and_battle(self, ctx):
         """모든 전투 명령어에서 공통으로 사용할 플레이어 및 전투 정보 확인 함수"""
         battle = self.active_battles.get(ctx.channel.id)
@@ -468,63 +278,56 @@ class BattleCog(commands.Cog):
         if not current_player_id or ctx.author.id != current_player_id: return None, None
         return battle, current_player_id
 
+    # 행동 명령어들
+    @commands.command(name="이동")
+    async def move(self, ctx, *directions):
+        battle, _ = await self.get_current_player_and_battle(ctx)
+        if not battle: return
 
-    @commands.command(name="대결")
-    async def battle_request(self, ctx, opponent: discord.Member):
-        if ctx.channel.id in self.active_battles: return await ctx.send("이 채널에서는 이미 다른 활동이 진행중입니다.")
-        if ctx.author == opponent: return await ctx.send("자기 자신과는 대결할 수 없습니다.")
-        all_data = load_data()
-        p1_id, p2_id = str(ctx.author.id), str(opponent.id)
-        if not all_data.get(p1_id, {}).get("registered", False) or not all_data.get(p2_id, {}).get("registered", False):
-            return await ctx.send("두 플레이어 모두 `!등록`을 완료해야 합니다.")
-        msg = await ctx.send(f"{opponent.mention}, {ctx.author.display_name}님의 대결 신청을 수락하시겠습니까? (15초 내 반응)"); await msg.add_reaction("✅"); await msg.add_reaction("❌")
-        def check(reaction, user): return user == opponent and str(reaction.emoji) in ["✅", "❌"]
-        try:
-            reaction, user = await self.bot.wait_for('reaction_add', timeout=15.0, check=check)
-            if str(reaction.emoji) == "✅":
-                await ctx.send("대결이 성사되었습니다! 전투를 시작합니다.")
-                battle = Battle(ctx.channel, ctx.author, opponent, self.active_battles)
-                self.active_battles[ctx.channel.id] = battle
-                await battle.start_turn_timer(); await battle.display_board()
-            else: await ctx.send("대결이 거절되었습니다.")
-        except asyncio.TimeoutError: await ctx.send("시간이 초과되어 대결이 취소되었습니다.")
+        if battle.battle_type == "pve":
+            return await ctx.send("사냥 중에는 이동할 수 없습니다.")
 
-    @commands.command(name="팀대결")
-    async def team_battle_request(self, ctx, teammate: discord.Member, opponent1: discord.Member, opponent2: discord.Member):
-        if ctx.channel.id in self.active_battles: return await ctx.send("이 채널에서는 이미 전투가 진행중입니다.")
-        players = {ctx.author, teammate, opponent1, opponent2}
-        if len(players) < 4: return await ctx.send("모든 플레이어는 서로 다른 유저여야 합니다.")
-        all_data = load_data()
-        for p in players:
-            if not all_data.get(str(p.id), {}).get("registered", False): return await ctx.send(f"{p.display_name}님은 아직 등록하지 않은 플레이어입니다.")
-        msg = await ctx.send(f"**⚔️ 팀 대결 신청! ⚔️**\n\n**A팀**: {ctx.author.mention}, {teammate.mention}\n**B팀**: {opponent1.mention}, {opponent2.mention}\n\nB팀의 {opponent1.mention}, {opponent2.mention} 님! 대결을 수락하시면 30초 안에 ✅ 반응을 눌러주세요. (두 명 모두 수락해야 시작됩니다)")
-        await msg.add_reaction("✅")
-        accepted_opponents = set()
-        def check(reaction, user): return str(reaction.emoji) == '✅' and user.id in [opponent1.id, opponent2.id]
-        try:
-            while len(accepted_opponents) < 2:
-                reaction, user = await self.bot.wait_for('reaction_add', timeout=30.0, check=check)
-                if user.id not in accepted_opponents:
-                    accepted_opponents.add(user.id); await ctx.send(f"✅ {user.display_name}님이 대결을 수락했습니다. (남은 인원: {2-len(accepted_opponents)}명)")
-            await ctx.send("양 팀 모두 대결을 수락했습니다! 전투를 시작합니다.")
-            team_a = [ctx.author, teammate]; team_b = [opponent1, opponent2]
-            battle = TeamBattle(ctx.channel, team_a, team_b, self.active_battles)
-            self.active_battles[ctx.channel.id] = battle
-            await battle.next_turn()
-        except asyncio.TimeoutError: return await ctx.send("시간이 초과되어 대결이 취소되었습니다.")
-    
+        if battle.turn_actions_left <= 0:
+            return await ctx.send("행동력이 없습니다.", delete_after=10)
 
+        p_stats = battle.players.get(ctx.author.id) if battle.battle_type == "pvp_team" else battle.get_player_stats(ctx.author)
+        
+        effects = p_stats.get('effects', {}); mobility_modifier = effects.get('mobility_modifier', 0)
+        base_mobility = 2 if p_stats['class'] == '검사' else 1
+        final_mobility = max(1, base_mobility + mobility_modifier)
 
-# cogs/battle.py 의 BattleCog 클래스 내부
-
-# cogs/battle.py 의 BattleCog 클래스 내부
+        if not (1 <= len(directions) <= final_mobility):
+            return await ctx.send(f"👉 현재 이동력은 **{final_mobility}**입니다. 1~{final_mobility}개의 방향을 입력해주세요.", delete_after=10)
+        
+        current_pos = p_stats['pos']; path = [current_pos]
+        for direction in directions:
+            next_pos = path[-1]
+            if direction.lower() == 'w': next_pos -= 5
+            elif direction.lower() == 's': next_pos += 5
+            elif direction.lower() == 'a': next_pos -= 1
+            elif direction.lower() == 'd': next_pos += 1
+            if not (0 <= next_pos < 15) or (direction.lower() in 'ad' and path[-1] // 5 != next_pos // 5):
+                return await ctx.send("❌ 맵 밖으로 이동할 수 없습니다.", delete_after=10)
+            path.append(next_pos)
+        
+        final_pos = path[-1]
+        
+        occupied_positions = []
+        if battle.battle_type == "pvp_1v1":
+            occupied_positions.append(battle.get_opponent_stats(ctx.author)['pos'])
+        else: # pvp_team
+            occupied_positions = [p['pos'] for p_id, p in battle.players.items() if p_id != ctx.author.id]
+        if final_pos in occupied_positions:
+            return await ctx.send("❌ 다른 플레이어가 있는 칸으로 이동할 수 없습니다.", delete_after=10)
+        
+        battle.grid[current_pos] = "□"; battle.grid[final_pos] = p_stats['emoji']; p_stats['pos'] = final_pos
+        battle.add_log(f"🚶 {p_stats['name']}이(가) 이동했습니다.")
+        await battle.handle_action_cost(1)
 
     @commands.command(name="공격")
     async def attack(self, ctx, target_user: discord.Member = None):
-        battle, current_player_id = await self.get_current_player_and_battle(ctx)
+        battle, _ = await self.get_current_player_and_battle(ctx)
         if not battle: return
-
-        # --- 공격자 및 타겟 정보 설정 ---
         attacker, target = None, None
         
         if battle.battle_type == "pve":
@@ -608,77 +411,11 @@ class BattleCog(commands.Cog):
             else: # PvP
                 await battle.handle_action_cost(1)
 
-   # cogs/battle.py 의 BattleCog 클래스 내부
-
-# cogs/battle.py 의 BattleCog 클래스 내부
-
-    @commands.command(name="이동")
-    async def move(self, ctx, *directions):
-        # 1. 공통 함수로 전투 정보 및 턴 확인
-        battle, current_player_id = await self.get_current_player_and_battle(ctx)
-        if not battle: return
-
-        # 2. PvE 상황에서는 이동 불가
-        if battle.battle_type == "pve":
-            return await ctx.send("사냥 중에는 이동할 수 없습니다.")
-
-        # 3. PvP 행동력 확인
-        if battle.turn_actions_left <= 0:
-            return await ctx.send("행동력이 없습니다.", delete_after=10)
-
-        # 4. 플레이어 정보 및 이동력 계산
-        p_stats = battle.players[ctx.author.id] if battle.battle_type == "pvp_team" else battle.get_player_stats(ctx.author)
-
-        effects = p_stats.get('effects', {})
-        mobility_modifier = effects.get('mobility_modifier', 0)
-        base_mobility = 2 if p_stats['class'] == '검사' else 1
-        final_mobility = max(1, base_mobility + mobility_modifier)
-
-        if not (1 <= len(directions) <= final_mobility):
-            return await ctx.send(f"👉 현재 이동력은 **{final_mobility}**입니다. 1~{final_mobility}개의 방향을 입력해주세요.", delete_after=10)
         
-        # 5. 경로 계산 및 유효성 검사
-        current_pos = p_stats['pos']
-        path = [current_pos]
-        
-        for direction in directions:
-            next_pos = path[-1]
-            if direction.lower() == 'w': next_pos -= 5
-            elif direction.lower() == 's': next_pos += 5
-            elif direction.lower() == 'a': next_pos -= 1
-            elif direction.lower() == 'd': next_pos += 1
-            
-            if not (0 <= next_pos < 15) or \
-               (direction.lower() in 'ad' and path[-1] // 5 != next_pos // 5):
-                return await ctx.send("❌ 맵 밖으로 이동할 수 없습니다.", delete_after=10)
-            path.append(next_pos)
-        
-        final_pos = path[-1]
-        
-        # 6. 다른 플레이어와 위치가 겹치는지 확인
-        occupied_positions = []
-        if battle.battle_type == "pvp_1v1":
-            occupied_positions.append(battle.get_opponent_stats(ctx.author)['pos'])
-        else: # pvp_team
-            occupied_positions = [p['pos'] for p_id, p in battle.players.items() if p_id != ctx.author.id]
-
-        if final_pos in occupied_positions:
-            return await ctx.send("❌ 다른 플레이어가 있는 칸으로 이동할 수 없습니다.", delete_after=10)
-        
-        # 7. 상태 업데이트 및 턴 소모
-        battle.grid[current_pos] = "□"
-        battle.grid[final_pos] = p_stats['emoji']
-        p_stats['pos'] = final_pos
-        battle.add_log(f"🚶 {p_stats['name']}이(가) 이동했습니다.")
-        await battle.handle_action_cost(1)
-
-# cogs/battle.py 의 BattleCog 클래스 내부
-
     @commands.command(name="특수")
     async def special_ability(self, ctx):
-        battle, current_player_id = await self.get_current_player_and_battle(ctx)
+        battle, _ = await self.get_current_player_and_battle(ctx)
         if not battle: return
-
         # PvE 상황에서는 사용 불가
         if battle.battle_type == "pve":
             return await ctx.send("사냥 중에는 기본 특수 능력을 사용할 수 없습니다. (`!스킬`을 사용해주세요)")
@@ -734,12 +471,10 @@ class BattleCog(commands.Cog):
         p_stats['special_cooldown'] = 2 
         await battle.handle_action_cost(1)
 
-
     @commands.command(name="스킬")
     async def use_skill(self, ctx, skill_number: int, target_user: discord.Member = None):
-        battle, current_player_id = await self.get_current_player_and_battle(ctx)
+        battle, _ = await self.get_current_player_and_battle(ctx)
         if not battle: return
-
         attacker = None
         if battle.battle_type == "pve":
             attacker = battle.player_stats
@@ -891,7 +626,6 @@ class BattleCog(commands.Cog):
             await battle.end_battle(ctx.author, f"{target['name']}이(가) 스킬에 맞아 쓰러졌습니다!")
             del self.active_battles[ctx.channel.id]
         return
-# cogs/battle.py 의 BattleCog 클래스 내부
 
 @commands.command(name="기권")
 async def forfeit(self, ctx):
@@ -931,7 +665,17 @@ async def forfeit(self, ctx):
         await battle.end_battle(winner_team_name, winner_ids, reason)
         if ctx.channel.id in self.active_battles: del self.active_battles[ctx.channel.id]
 
-    # cogs/battle.py 의 BattleCog 클래스 내부
+    
+
+async def setup(bot):
+    await bot.add_cog(BattleCog(bot))
+
+
+
+
+
+
+'''
 
     @commands.command(name="상태점검")
     @commands.is_owner() # 봇 소유자만 실행 가능
