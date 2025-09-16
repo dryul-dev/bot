@@ -263,20 +263,47 @@ class BattleCog(commands.Cog):
         self.bot = bot
         self.active_battles = bot.active_battles # main.py의 목록을 가져옴
     
-    async def get_current_player_and_battle(self, ctx):
-            battle = self.active_battles.get(ctx.channel.id)
-            if not battle: return None, None
-            
-            current_player_id = None
-            if isinstance(battle, PveBattle):
-                if battle.current_turn != "player": return None, None
-                current_player_id = battle.player_stats['id']
-            elif isinstance(battle, (Battle, TeamBattle)):
-                current_player_id = battle.current_turn_player.id if isinstance(battle, Battle) else battle.current_turn_player_id
+# cogs/battle.py 의 BattleCog 클래스 내부
 
-            if ctx.author.id != current_player_id: return None, None
-            
-            return battle, current_player_id
+    async def get_current_player_and_battle(self, ctx):
+        """[디버깅 버전] 모든 전투 명령어에서 공통으로 사용할 플레이어 및 전투 정보 확인 함수"""
+        print("\n--- [DEBUG] get_current_player_and_battle 함수 시작 ---")
+        
+        battle = self.active_battles.get(ctx.channel.id)
+        if not battle:
+            print("[DEBUG] 1. 실패: active_battles에서 전투 객체를 찾지 못함.")
+            return None, None
+        
+        print(f"[DEBUG] 1. 전투 객체 확인 완료: {battle}")
+        print(f"   - 전투 타입(꼬리표): {getattr(battle, 'battle_type', '없음')}")
+
+        current_player_id = None
+        if hasattr(battle, 'battle_type'):
+            if battle.battle_type == "pve":
+                print("[DEBUG] 2. PvE 전투로 판단.")
+                if battle.current_turn != "player":
+                    print(f"[DEBUG] 2a. 실패: PvE 턴이 아님 (현재 턴: {battle.current_turn})")
+                    return None, None
+                current_player_id = battle.player_stats['id']
+
+            elif battle.battle_type in ["pvp_1v1", "pvp_team"]:
+                print(f"[DEBUG] 2. {battle.battle_type} 전투로 판단.")
+                current_player_id = battle.current_turn_player.id if battle.battle_type == "pvp_1v1" else battle.current_turn_player_id
+        
+        else:
+            print("[DEBUG] 2. 실패: 전투 객체에 battle_type 속성이 없음.")
+            return None, None
+
+        print(f"[DEBUG] 2b. 계산된 현재 턴 플레이어 ID: {current_player_id}")
+        print(f"    - 명령어를 사용한 유저 ID: {ctx.author.id}")
+
+        if ctx.author.id != current_player_id:
+            print(f"[DEBUG] 3. 실패: 명령어 사용자({ctx.author.id})와 현재 턴 플레이어({current_player_id})가 일치하지 않음.")
+            return None, None
+        
+        print("[DEBUG] 3. 최종 턴 확인 통과.")
+        print(f"--- [DEBUG] 함수가 battle 객체와 플레이어 ID({current_player_id})를 성공적으로 반환합니다. ---")
+        return battle, current_player_id
 
     @commands.command(name="대결")
     async def battle_request(self, ctx, opponent: discord.Member):
