@@ -130,7 +130,6 @@ class SchoolCog(commands.Cog):
 
     @commands.command(name="선물")
     async def gift_item(self, ctx, target_user: discord.Member, *, item_name_input: str):
-        print(f"--- [LOG] !선물 명령어 감지: {ctx.author.name} ---")
         item_name = item_name_input.replace(" ", "")
         if ctx.author == target_user: return await ctx.send("자기 자신에게는 선물을 보낼 수 없습니다.")
             
@@ -151,7 +150,6 @@ class SchoolCog(commands.Cog):
 
     @commands.command(name="사용")
     async def use_item(self, ctx, *, item_name_input: str):
-        print(f"--- [LOG] !사용 명령어 감지: {ctx.author.name} ---")
         item_name = item_name_input.replace(" ", "")
         all_data = load_data()
         player_data = all_data.get(str(ctx.author.id))

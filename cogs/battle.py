@@ -333,7 +333,8 @@ class BattleCog(commands.Cog):
         if battle.battle_type == "pve":
             attacker = battle.player_stats
             target = battle.monster_stats
-        elif battle.battle_type == "pvp_1v1":
+            await ctx.send("`[DEBUG]` 1. PvE 전투 확인, 공격자/타겟 설정 완료.")
+        elif battle.battle_type in ["pvp_1v1", "pvp_team"]:
             opponent_user = battle.p2_user if ctx.author.id == battle.p1_user.id else battle.p1_user
             target_user = target_user or opponent_user
             attacker = battle.get_player_stats(ctx.author)
@@ -397,6 +398,7 @@ class BattleCog(commands.Cog):
         battle.add_log(f"💥 {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해를 입혔습니다!")
 
         if target['current_hp'] <= 0:
+            await ctx.send("`[DEBUG]` 3. 몬스터 HP 0 확인, 전투 종료.")
             if battle.battle_type == "pve":
                 await battle.end_battle(win=True)
             elif battle.battle_type == "pvp_1v1":
@@ -406,6 +408,7 @@ class BattleCog(commands.Cog):
                 if await battle.check_game_over(): 
                     if ctx.channel.id in self.active_battles: del self.active_battles[ctx.channel.id]
         else:
+            await ctx.send("`[DEBUG]` 3. 전투 계속, 몬스터 턴으로 전환.")
             if battle.battle_type == "pve":
                 await battle.monster_turn()
             else: # PvP
