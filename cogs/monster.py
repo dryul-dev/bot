@@ -216,7 +216,7 @@ class MonsterCog(commands.Cog):
 
 
 # cogs/growth.py의 fix_data_structure 함수 내부
-    '''
+    
     @commands.command(name="데이터점검")
     @commands.is_owner()
     async def fix_data_structure(self, ctx):
@@ -242,11 +242,17 @@ class MonsterCog(commands.Cog):
                 player_data['pve_inventory'] = new_inventory_dict
                 updated = True
             # ▲▲▲ 여기가 추가된 부분입니다 ▲▲▲
+            if 'today_blessing' not in player_data:
+                player_data.setdefault('today_blessing', None)
+                updated = True
+            if 'last_blessing_date' not in player_data:
+                player_data.setdefault('last_blessing_date', None)
+                updated = True
 
             # ... (임시 데이터 초기화 로직) ...
 
         save_data(all_data)
         await ctx.send(f"✅ 완료! 총 {len(all_data)}명의 유저 중 {updated_users}명의 데이터 구조를 업데이트했습니다.")  
-        '''
+        
 async def setup(bot):
     await bot.add_cog(MonsterCog(bot))

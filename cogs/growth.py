@@ -5,6 +5,7 @@ from discord.ext import commands
 import json
 import asyncio
 import os
+import random
 from datetime import datetime, time, timedelta, timezone
 
 
@@ -423,6 +424,55 @@ class GrowthCog(commands.Cog):
         await ctx.send(embed=embed)
 
 
+    @commands.command(name="축복")
+    async def blessing(self, ctx):
+        """오늘의 축복 메시지를 확인합니다."""
+        all_data = load_data()
+        player_id = str(ctx.author.id)
+        player_data = all_data.get(player_id)
+
+        if not player_data or not player_data.get("registered"):
+            return await ctx.send("먼저 `!등록`을 진행해주세요.")
+
+        # 축복 메시지 목록
+        blessing_list = [
+            "예상치 못한 곳에서 새로운 기회가 찾아올 것이니...",
+            "흔들리지 않는 마음의 여유가 함께하리니...",
+            "담대하라, 풀리지 않는 문제는 없으니...",
+            "그대의 생각보다 강한 자임을 알라, 그대여...",
+            "나아가라, 그대에게 불가능은 없으리니...",
+            "쏟은 모든 사랑이 그대에게 돌아오리니...",
+            "사랑 받기 마땅하고 존귀한 존재, 그대여...",
+            "가장 좋은 일은 아직 일어나지 않았으니...",
+            "어제보다 더 나은 오늘이 함께하리니..."
+        ]
+
+        # KST 기준 오늘 날짜 확인
+        today_kst = datetime.now(self.KST).strftime('%Y-%m-%d')
+        last_blessing_date = player_data.get("last_blessing_date")
+
+        # 마지막으로 축복을 받은 날짜가 오늘이 아니라면, 새로운 축복을 뽑습니다.
+        if last_blessing_date != today_kst:
+            new_blessing = random.choice(blessing_list)
+            player_data["today_blessing"] = new_blessing
+            player_data["last_blessing_date"] = today_kst
+            save_data(all_data)
+            current_blessing = new_blessing
+        # 오늘 이미 축복을 받았다면, 저장된 축복을 불러옵니다.
+        else:
+            current_blessing = player_data.get("today_blessing", "오류: 오늘의 축복을 찾을 수 없습니다.")
+
+        # Embed 생성 및 전송
+        embed = discord.Embed(
+            title="✨ 오늘의 축복 ✨",
+            description=f"**{current_blessing}**",
+            color=int(player_data['color'][1:], 16)
+        )
+        embed.set_footer(text=f"{ctx.author.display_name}님의 하루를 응원합니다.")
+        await ctx.send(embed=embed)
+
+    '''
+
     @commands.command(name="수동초기화")
     @commands.is_owner() # 봇 소유자만 실행 가능하도록 제한
     async def manual_reset_challenges(self, ctx):
@@ -486,7 +536,7 @@ class GrowthCog(commands.Cog):
             print(f"!데이터조회 명령어 오류 발생: {error}") # 터미널에 상세 오류 출력
             await ctx.send("명령어 처리 중 알 수 없는 오류가 발생했습니다.")
 
-
+    '''
     
 
 # 봇에 Cog를 추가하기 위한 필수 함수
