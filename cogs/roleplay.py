@@ -134,33 +134,31 @@ class RoleplayCog(commands.Cog):
             await ctx.send(f"오류가 발생하여 메시지를 보낼 수 없습니다.", delete_after=10)
 
 
-# cogs/roleplay.py 의 RoleplayCog 클래스 내부에 추가
+# cogs/roleplay.py 의 RoleplayCog 클래스 내부
 
     @commands.command(name="다이스")
     async def roll_dice(self, ctx, dice_string: str):
         """주사위를 굴립니다. (예: !다이스 2d6)"""
         try:
-            # 'd'를 기준으로 주사위 개수와 면 수를 분리
             rolls, sides = map(int, dice_string.lower().split('d'))
         except Exception:
             await ctx.send("잘못된 형식입니다. `[개수]d[면 수]` 형식으로 입력해주세요. (예: `2d6`)")
             return
 
-        # 비정상적인 입력 방지
         if not (1 <= rolls <= 100):
             return await ctx.send("주사위 개수는 1개에서 100개 사이로 입력해주세요.")
         if not (2 <= sides <= 1000):
             return await ctx.send("주사위 면 수는 2면에서 1000면 사이로 입력해주세요.")
 
-        # 주사위 굴리기
-        results = [random.randint(1, sides) for _ in range(rolls)]
-        total = sum(results)
+        # 주사위를 굴려 총합만 계산
+        total = sum(random.randint(1, sides) for _ in range(rolls))
 
         # 결과 메시지 생성
         embed = discord.Embed(
-            title="🎲 주사위 굴림 결과",
+            title="🎲 주사위 굴림",
+            description=f"**{ctx.author.display_name}**님이 **{rolls}d{sides}**를 굴려 **{total}**이(가) 나왔습니다.",
+            color=discord.Color.dark_red()
         )
-        embed.add_field(value=f"**{total}**", inline=False)
         
         await ctx.send(embed=embed)
 
