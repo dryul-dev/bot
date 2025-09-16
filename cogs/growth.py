@@ -454,6 +454,35 @@ class GrowthCog(commands.Cog):
         if isinstance(error, commands.NotOwner):
             await ctx.send("이 명령어는 봇 소유자만 사용할 수 있습니다.")
 
+    # cogs/growth.py 의 GrowthCog 클래스 내부에 추가
+
+    @commands.command(name="데이터조회")
+    @commands.is_owner() # 봇 소유자만 실행 가능
+    async def view_user_data(self, ctx, target_user: discord.Member):
+        """[관리자용] 특정 유저의 raw data를 json 형식으로 확인합니다."""
+        
+        all_data = load_data()
+        target_id = str(target_user.id)
+        player_data = all_data.get(target_id)
+
+        if not player_data:
+            return await ctx.send(f"{target_user.display_name}님의 데이터를 찾을 수 없습니다.")
+
+        # json 데이터를 보기 좋게 문자열로 변환
+        data_str = json.dumps(player_data, indent=4, ensure_ascii=False)
+        
+        embed = discord.Embed(
+            title=f"📄 {target_user.display_name}님의 데이터",
+            description=f"```json\n{data_str}\n```",
+            color=discord.Color.blue()
+        )
+        await ctx.send(embed=embed)
+
+    @view_user_data.error
+    async def view_user_data_error(self, ctx, error):
+        if isinstance(error, commands.NotOwner):
+            await ctx.send("이 명령어는 봇 소유자만 사용할 수 있습니다.")
+
 # cogs/growth.py 파일의 GrowthCog 클래스 내부에 추가
 
     

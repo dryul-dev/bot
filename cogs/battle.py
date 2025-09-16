@@ -324,7 +324,7 @@ class BattleCog(commands.Cog):
     async def attack(self, ctx, target_user: discord.Member = None):
         battle, current_player_id = await self.get_current_player_and_battle(ctx)
         if not battle: return
-
+    '''
         # --- 공격자 및 타겟 정보 설정 ---
         attacker = battle.player_stats
         target = battle.monster_stats
@@ -351,8 +351,8 @@ class BattleCog(commands.Cog):
         else:
 
             await battle.monster_turn()
-# cogs/battle.py 의 BattleCog 클래스 내부
-    '''
+        '''
+
     @commands.command(name="공격")
     async def attack(self, ctx, target_user: discord.Member = None):
         battle, current_player_id = await self.get_current_player_and_battle(ctx)
@@ -388,9 +388,8 @@ class BattleCog(commands.Cog):
         else: # PvP
             distance = battle.get_distance(attacker['pos'], target['pos'])
             if attacker['class'] == '마법사' and 3 <= distance <= 5: can_attack, attack_type = True, "원거리"
-            elif attacker['class'] == '마검사':
-                if distance == 1: can_attack, attack_type = True, "근거리"
-                elif 2 <= distance <= 3: can_attack, attack_type = True, "원거리"
+            elif attacker['class'] == '마검사' and (distance == 1 or 2 <= distance <= 3):
+                attack_type = "근거리" if distance == 1 else "원거리"; can_attack = True
             elif attacker['class'] == '검사' and distance == 1: can_attack, attack_type = True, "근거리"
         
         if not can_attack: return await ctx.send("❌ 공격 사거리가 아닙니다.", delete_after=10)
@@ -419,12 +418,12 @@ class BattleCog(commands.Cog):
         
         final_damage = max(1, round(base_damage * multiplier) + attribute_damage - target.get('defense', 0))
 
-        # --- 4. 데미지 적용 및 후속 처리 ---
         target['current_hp'] = max(0, target['current_hp'] - final_damage)
         battle.add_log(f"💥 {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해를 입혔습니다!")
 
         if target['current_hp'] <= 0:
-            if battle.battle_type == "pve": await battle.end_battle(win=True)
+            if battle.battle_type == "pve":
+                await battle.end_battle(win=True)
             elif battle.battle_type == "pvp_1v1":
                 await battle.end_battle(ctx.author, f"{target['name']}이(가) 공격을 받고 쓰러졌습니다!")
                 if ctx.channel.id in self.active_battles: del self.active_battles[ctx.channel.id]
@@ -432,10 +431,11 @@ class BattleCog(commands.Cog):
                 if await battle.check_game_over(): 
                     if ctx.channel.id in self.active_battles: del self.active_battles[ctx.channel.id]
         else:
-            if battle.battle_type == "pve": await battle.monster_turn()
-            else: await battle.handle_action_cost(1)
+            if battle.battle_type == "pve":
+                await battle.monster_turn()
+            else: # PvP
+                await battle.handle_action_cost(1)
 
-    '''
 
 
         
@@ -658,45 +658,39 @@ class BattleCog(commands.Cog):
             del self.active_battles[ctx.channel.id]
         return
 
-@commands.command(name="기권")
-async def forfeit(self, ctx):
-    battle = self.active_battles.get(ctx.channel.id)
-    if not battle: return
+# cogs/battle.py 의 BattleCog 클래스 내부
 
-    # [ PvE 사냥일 경우 ]
-    if battle.battle_type == "pve":
-        if ctx.author.id == battle.player_user.id:
-            await battle.end_battle(win=False, reason=f"{ctx.author.display_name}님이 사냥을 포기했습니다.")
-        else:
-            await ctx.send("당신은 현재 사냥 중이 아닙니다.")
-        return
+    @commands.command(name="기권")
+    async def forfeit(self, ctx):
+        battle = self.active_battles.get(ctx.channel.id)
+        if not battle: return
 
-    # [ PvP 대결일 경우 ]
-    # 1:1 대결
-    if battle.battle_type == "pvp_1v1":
-        if ctx.author.id in [battle.p1_user.id, battle.p2_user.id]:
-            winner_user = battle.p2_user if ctx.author.id == battle.p1_user.id else battle.p1_user
-            await battle.end_battle(winner_user, f"{ctx.author.display_name}님이 기권했습니다.")
+        # battle_type 꼬리표로 분기
+        if battle.battle_type == "pve":
+            if ctx.author.id == battle.player_user.id:
+                await battle.end_battle(win=False, reason=f"{ctx.author.display_name}님이 사냥을 포기했습니다.")
+            else:
+                await ctx.send("당신은 현재 사냥 중이 아닙니다.")
+        
+        elif battle.battle_type == "pvp_1v1":
+            if ctx.author.id in [battle.p1_user.id, battle.p2_user.id]:
+                winner_user = battle.p2_user if ctx.author.id == battle.p1_user.id else battle.p1_user
+                await battle.end_battle(winner_user, f"{ctx.author.display_name}님이 기권했습니다.")
+                if ctx.channel.id in self.active_battles: del self.active_battles[ctx.channel.id]
+            else:
+                await ctx.send("당신은 이 전투의 참여자가 아닙니다.")
+
+        elif battle.battle_type == "pvp_team":
+            winner_team_name, winner_ids, reason = None, None, None
+            if ctx.author.id in battle.team_a_ids:
+                winner_team_name, winner_ids, reason = "B팀", battle.team_b_ids, f"A팀의 {ctx.author.display_name}님이 기권했습니다."
+            elif ctx.author.id in battle.team_b_ids:
+                winner_team_name, winner_ids, reason = "A팀", battle.team_a_ids, f"B팀의 {ctx.author.display_name}님이 기권했습니다."
+            else:
+                return await ctx.send("당신은 이 전투의 참여자가 아닙니다.")
+
+            await battle.end_battle(winner_team_name, winner_ids, reason)
             if ctx.channel.id in self.active_battles: del self.active_battles[ctx.channel.id]
-        else:
-            await ctx.send("당신은 이 전투의 참여자가 아닙니다.")
-    
-    # 팀 대결
-    elif battle.battle_type == "pvp_team":
-        winner_team_name, winner_ids, reason = None, None, None
-        if ctx.author.id in battle.team_a_ids:
-            winner_team_name, winner_ids = "B팀", battle.team_b_ids
-            reason = f"A팀의 {ctx.author.display_name}님이 기권했습니다."
-        elif ctx.author.id in battle.team_b_ids:
-            winner_team_name, winner_ids = "A팀", battle.team_a_ids
-            reason = f"B팀의 {ctx.author.display_name}님이 기권했습니다."
-        else:
-            return await ctx.send("당신은 이 전투의 참여자가 아닙니다.")
-
-        await battle.end_battle(winner_team_name, winner_ids, reason)
-        if ctx.channel.id in self.active_battles: del self.active_battles[ctx.channel.id]
-
-    
 
 async def setup(bot):
     await bot.add_cog(BattleCog(bot))
