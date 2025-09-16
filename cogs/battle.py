@@ -656,6 +656,47 @@ async def forfeit(self, ctx):
         await battle.end_battle(winner_team_name, winner_ids, reason)
         if ctx.channel.id in self.active_battles: del self.active_battles[ctx.channel.id]
 
+    # cogs/battle.py 의 BattleCog 클래스 내부
+
+    @commands.command(name="상태점검")
+    @commands.is_owner() # 봇 소유자만 실행 가능
+    async def check_battle_status(self, ctx):
+        """[관리자용] 현재 채널의 전투 상태를 상세히 진단합니다."""
+        
+        embed = discord.Embed(title="🔬 전투 상태 진단 결과", color=discord.Color.gold())
+        
+        battle = self.active_battles.get(ctx.channel.id)
+        
+        # 1. 전투 객체 확인
+        if not battle:
+            embed.description = "현재 채널에서 진행 중인 전투를 찾을 수 없습니다."
+            return await ctx.send(embed=embed)
+        
+        embed.add_field(name="1. 전투 객체", value=f"✅ 찾음 (`{type(battle).__name__}`)", inline=False)
+
+        # 2. 헬퍼 함수 호출 및 결과 확인
+        battle_obj, player_id = await self.get_current_player_and_battle(ctx)
+        
+        if not battle_obj or not player_id:
+            embed.add_field(name="2. 턴 확인 함수(`get_current_player_and_battle`)", value="❌ 실패 (None 반환)", inline=False)
+            embed.description = "헬퍼 함수가 플레이어 정보를 반환하는 데 실패했습니다. 턴이 아니거나, 로직에 문제가 있습니다."
+        else:
+            embed.add_field(name="2. 턴 확인 함수(`get_current_player_and_battle`)", value="✅ 성공", inline=False)
+            embed.add_field(name=" - 현재 턴 플레이어 ID", value=f"`{player_id}`", inline=True)
+            embed.add_field(name=" - 명령어 사용자 ID", value=f"`{ctx.author.id}`", inline=True)
+            
+            if player_id == ctx.author.id:
+                embed.add_field(name="최종 결론", value="🟢 **정상**: 이 상태에서는 명령어가 작동해야 합니다.", inline=False)
+            else:
+                embed.add_field(name="최종 결론", value="🔴 **오류**: 턴 ID와 사용자 ID가 일치하지 않습니다.", inline=False)
+
+        await ctx.send(embed=embed)
+
+    @check_battle_status.error
+    async def check_status_error(self, ctx, error):
+        if isinstance(error, commands.NotOwner):
+            await ctx.send("이 명령어는 봇 소유자만 사용할 수 있습니다.")
+
 
 # 봇에 Cog를 추가하기 위한 필수 함수
 async def setup(bot):
