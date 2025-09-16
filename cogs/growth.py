@@ -160,12 +160,6 @@ class GrowthCog(commands.Cog):
         save_data(all_data)
         await ctx.send(f"'{item}' 정보가 '{value}' (으)로 성공적으로 변경되었습니다.")
 
-    # --- 스탯 성장 명령어 (기존 코드 개선) ---
-    # ... (이전 답변의 !정신도전, !육체도전, !도전완료 코드와 동일하게 작동하므로 생략)
-    # ... 필요하시면 해당 부분을 여기에 붙여넣으시면 됩니다.
-
-   
-
 
     @commands.command(name="리셋")
     async def reset_my_data(self, ctx):
@@ -429,8 +423,6 @@ class GrowthCog(commands.Cog):
         await ctx.send(embed=embed)
 
 
-    # cogs/growth.py 파일의 GrowthCog 클래스 내부에 추가
-
     @commands.command(name="수동초기화")
     @commands.is_owner() # 봇 소유자만 실행 가능하도록 제한
     async def manual_reset_challenges(self, ctx):
@@ -454,10 +446,8 @@ class GrowthCog(commands.Cog):
         if isinstance(error, commands.NotOwner):
             await ctx.send("이 명령어는 봇 소유자만 사용할 수 있습니다.")
 
-    # cogs/growth.py 의 GrowthCog 클래스 내부에 추가
-
     @commands.command(name="데이터조회")
-    @commands.is_owner() # 봇 소유자만 실행 가능
+    @commands.is_owner() # 봇 소유자만 실행 가능하도록 제한
     async def view_user_data(self, ctx, target_user: discord.Member):
         """[관리자용] 특정 유저의 raw data를 json 형식으로 확인합니다."""
         
@@ -469,21 +459,33 @@ class GrowthCog(commands.Cog):
             return await ctx.send(f"{target_user.display_name}님의 데이터를 찾을 수 없습니다.")
 
         # json 데이터를 보기 좋게 문자열로 변환
+        # indent=4는 보기 좋게 4칸 들여쓰기를, ensure_ascii=False는 한글이 깨지지 않게 합니다.
         data_str = json.dumps(player_data, indent=4, ensure_ascii=False)
         
-        embed = discord.Embed(
-            title=f"📄 {target_user.display_name}님의 데이터",
-            description=f"```json\n{data_str}\n```",
-            color=discord.Color.blue()
-        )
-        await ctx.send(embed=embed)
+        # 데이터가 너무 길 경우를 대비하여 여러 메시지로 나누어 보낼 수 있도록 처리
+        if len(data_str) > 1900:
+            await ctx.send(f"📄 **{target_user.display_name}**님의 데이터가 너무 길어 여러 부분으로 나누어 표시합니다.")
+            for i in range(0, len(data_str), 1900):
+                chunk = data_str[i:i+1900]
+                await ctx.send(f"```json\n{chunk}\n```")
+        else:
+            embed = discord.Embed(
+                title=f"📄 {target_user.display_name}님의 데이터",
+                description=f"```json\n{data_str}\n```",
+                color=discord.Color.blue()
+            )
+            await ctx.send(embed=embed)
 
     @view_user_data.error
     async def view_user_data_error(self, ctx, error):
         if isinstance(error, commands.NotOwner):
             await ctx.send("이 명령어는 봇 소유자만 사용할 수 있습니다.")
+        elif isinstance(error, commands.MissingRequiredArgument):
+            await ctx.send("사용법: `!데이터조회 @유저이름`")
+        else:
+            print(f"!데이터조회 명령어 오류 발생: {error}") # 터미널에 상세 오류 출력
+            await ctx.send("명령어 처리 중 알 수 없는 오류가 발생했습니다.")
 
-# cogs/growth.py 파일의 GrowthCog 클래스 내부에 추가
 
     
 

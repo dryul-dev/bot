@@ -51,8 +51,10 @@ class PveBattle:
         monster_template = MONSTER_DATA[monster_name]
         
         avg_player_damage = (self.player_stats['physical'] + self.player_stats['mental']) / 2 + self.player_stats['level']
-        monster_hp = round(max(15, avg_player_damage * random.uniform(3.5, 4.0)))
-        monster_ap = round(max(3, self.player_stats['hp'] / random.uniform(5.0, 7.0)))
+        monster_hp = round(max(10, avg_player_damage * random.uniform(2.5, 3.5)))
+
+        # 공격력: 플레이어 체력을 나누는 값을 늘려서, 몬스터의 공격력을 낮춤
+        monster_ap = round(max(2, self.player_stats['hp'] / random.uniform(6.0, 8.0)))
 
         self.monster_stats = {
             "name": monster_name, "level": level, "attribute": monster_template['attribute'], "defense": 0,
