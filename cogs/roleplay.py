@@ -27,6 +27,7 @@ class RoleplayCog(commands.Cog):
     @commands.is_owner()
     async def create_profile(self, ctx, name: str, avatar_url: str, webhook_url: str):
         """새로운 가상 프로필을 등록합니다. !프로필생성 <이름> <이미지URL> <웹훅URL>"""
+        webhook_url = webhook_url.strip('<>')
         profiles = load_profiles()
         if name in profiles:
             return await ctx.send(f"이미 '{name}' 이름의 프로필이 존재합니다.")
