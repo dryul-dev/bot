@@ -260,7 +260,7 @@ class BattleCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.active_battles = bot.active_battles # main.py의 목록을 가져옴
-
+    async def get_current_player_and_battle(self, ctx):
 # cogs/battle.py 의 BattleCog 클래스 내부
 
     @commands.command(name="대결")

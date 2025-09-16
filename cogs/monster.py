@@ -1,5 +1,3 @@
-# cogs/monster.py
-
 import discord
 from discord.ext import commands
 import json
@@ -7,14 +5,12 @@ import os
 import random
 import asyncio
 
-# 데이터 로딩/저장 함수
 def load_data():
     if not os.path.exists("player_data.json"): return {}
     with open("player_data.json", 'r', encoding='utf-8') as f: return json.load(f)
 def save_data(data):
     with open("player_data.json", 'w', encoding='utf-8') as f: json.dump(data, f, indent=4, ensure_ascii=False)
 
-# 몬스터 기본 정보
 MONSTER_DATA = {
     "슬라임": { "attribute": "Heart", "drops": [{"name": "끈적한 점액", "chance": 0.8}, {"name": "슬라임의 핵", "chance": 0.2}] },
     "고블린": { "attribute": "Gut", "drops": [{"name": "낡은 단검", "chance": 0.5}, {"name": "가죽 조각", "chance": 0.7}] },
@@ -147,15 +143,15 @@ class MonsterCog(commands.Cog):
     @commands.command(name="사냥")
     async def hunt(self, ctx):
         if ctx.channel.id in self.active_battles:
-            return await ctx.send("이 채널에서는 이미 다른 활동(전투, 사냥 등)이 진행중입니다.")
+            return await ctx.send("이 채널에서는 이미 다른 활동이 진행중입니다.")
 
         battle = PveBattle(ctx.channel, ctx.author, self.active_battles)
         self.active_battles[ctx.channel.id] = battle
-
+        
         embed = discord.Embed(title=f"몬스터 출현! - {battle.monster_stats['name']} (Lv.{battle.monster_stats['level']})", color=0xDC143C)
         embed.add_field(name=f"{battle.player_stats['name']} (Lv.{battle.player_stats['level']})", value=f"HP: {battle.player_stats['current_hp']}/{battle.player_stats['hp']}", inline=True)
         embed.add_field(name=f"{battle.monster_stats['name']}", value=f"HP: {battle.monster_stats['current_hp']}/{battle.monster_stats['hp']}", inline=True)
-        embed.set_footer(text="당신의 턴입니다. (`!공격`, `!스킬 1`, `!아이템`, `!도망`)")
+        embed.set_footer(text="당신의 턴입니다. (`!공격`, `!스킬 1`, `!도망`)")
         await ctx.send(embed=embed)
         await battle.start_turn_timer()
 
