@@ -258,24 +258,24 @@ class BattleCog(commands.Cog):
         self.bot = bot
         self.active_battles = bot.active_battles # main.py의 목록을 가져옴
 
+# cogs/battle.py 의 BattleCog 클래스 내부
+
     @commands.command(name="대결")
     async def battle_request(self, ctx, opponent: discord.Member):
+        # 1. 가장 먼저 기본적인 조건들을 확인합니다.
         if ctx.author == opponent:
-            await ctx.send("자기 자신과는 대결할 수 없습니다.")
-            return
+            return await ctx.send("자기 자신과는 대결할 수 없습니다.")
         if ctx.channel.id in self.active_battles:
-            await ctx.send("이 채널에서는 이미 전투가 진행중입니다.")
-            return
+            return await ctx.send("이 채널에서는 이미 다른 활동이 진행중입니다.")
 
         all_data = load_data()
         p1_id, p2_id = str(ctx.author.id), str(opponent.id)
 
         if not all_data.get(p1_id, {}).get("registered", False) or \
-        not all_data.get(p2_id, {}).get("registered", False):
-            await ctx.send("두 플레이어 모두 `!등록`을 완료해야 합니다.")
-            return
+           not all_data.get(p2_id, {}).get("registered", False):
+            return await ctx.send("두 플레이어 모두 `!등록`을 완료해야 합니다.")
 
-        # 대결 수락/거절
+        # 2. 모든 확인이 끝난 후, 상대방에게 수락 여부를 묻습니다.
         msg = await ctx.send(f"{opponent.mention}, {ctx.author.display_name}님의 대결 신청을 수락하시겠습니까? (15초 내 반응)")
         await msg.add_reaction("✅")
         await msg.add_reaction("❌")
@@ -285,61 +285,57 @@ class BattleCog(commands.Cog):
 
         try:
             reaction, user = await self.bot.wait_for('reaction_add', timeout=15.0, check=check)
+            
+            # 3. 상대방이 수락했을 때만 Battle 객체를 생성하고 전투를 시작합니다.
             if str(reaction.emoji) == "✅":
-                if str(reaction.emoji) == "✅":
-                    await ctx.send("대결이 성사되었습니다! 전투를 시작합니다.")
-                    battle = Battle(ctx.channel, ctx.author, opponent)
-                    self.active_battles[ctx.channel.id] = battle
-                    await battle.start_turn_timer()
-                    await battle.display_board()
+                await ctx.send("대결이 성사되었습니다! 전투를 시작합니다.")
+                battle = Battle(ctx.channel, ctx.author, opponent, self.active_battles)
+                self.active_battles[ctx.channel.id] = battle
+                await battle.start_turn_timer()
+                await battle.display_board()
             else:
                 await ctx.send("대결이 거절되었습니다.")
+
         except asyncio.TimeoutError:
             await ctx.send("시간이 초과되어 대결이 취소되었습니다.")
 
-        
     @commands.command(name="팀대결")
     async def team_battle_request(self, ctx, teammate: discord.Member, opponent1: discord.Member, opponent2: discord.Member):
         if ctx.channel.id in self.active_battles: return await ctx.send("이 채널에서는 이미 전투가 진행중입니다.")
         players = {ctx.author, teammate, opponent1, opponent2}
         if len(players) < 4: return await ctx.send("모든 플레이어는 서로 다른 유저여야 합니다.")
+        
         all_data = load_data()
         for p in players:
             if not all_data.get(str(p.id), {}).get("registered", False): return await ctx.send(f"{p.display_name}님은 아직 등록하지 않은 플레이어입니다.")
 
-        msg = await ctx.send(f"**⚔️ 팀 대결 신청! ⚔️**\n\n**A팀**: {ctx.author.mention} (리더), {teammate.mention}\n**B팀**: {opponent1.mention} (리더), {opponent2.mention}\n\nB팀의 {opponent1.mention}, {opponent2.mention} 님! 대결을 수락하시면 30초 안에 ✅ 반응을 눌러주세요. (두 명 모두 수락해야 시작됩니다)")
+        msg = await ctx.send(
+            f"**⚔️ 팀 대결 신청! ⚔️**\n\n"
+            f"**A팀**: {ctx.author.mention} (리더), {teammate.mention}\n"
+            f"**B팀**: {opponent1.mention} (리더), {opponent2.mention}\n\n"
+            f"B팀의 {opponent1.mention}, {opponent2.mention} 님! 대결을 수락하시면 30초 안에 ✅ 반응을 눌러주세요. (두 명 모두 수락해야 시작됩니다)"
+        )
         await msg.add_reaction("✅")
+        
         accepted_opponents = set()
         def check(reaction, user): return str(reaction.emoji) == '✅' and user.id in [opponent1.id, opponent2.id]
+        
         try:
             while len(accepted_opponents) < 2:
                 reaction, user = await self.bot.wait_for('reaction_add', timeout=30.0, check=check)
                 if user.id not in accepted_opponents:
                     accepted_opponents.add(user.id)
                     await ctx.send(f"✅ {user.display_name}님이 대결을 수락했습니다. (남은 인원: {2-len(accepted_opponents)}명)")
+            
+            # 모든 로직을 try 블록 안으로 이동
             await ctx.send("양 팀 모두 대결을 수락했습니다! 전투를 시작합니다.")
             team_a = [ctx.author, teammate]; team_b = [opponent1, opponent2]
-            # 클래스에 active_battles 참조를 전달
             battle = TeamBattle(ctx.channel, team_a, team_b, self.active_battles)
             self.active_battles[ctx.channel.id] = battle
             await battle.next_turn()
-        except asyncio.TimeoutError: return await ctx.send("시간이 초과되어 대결이 취소되었습니다.")
-        
-    async def get_current_player_and_battle(self, ctx):
-        """모든 전투 명령어에서 공통으로 사용할 플레이어 및 전투 정보 확인 함수"""
-        battle = self.active_battles.get(ctx.channel.id)
-        if not battle: return None, None
-        
-        current_player_id = None
-        if isinstance(battle, PveBattle):
-            if battle.current_turn != "player": return None, None
-            current_player_id = battle.player_stats['id']
-        elif isinstance(battle, (Battle, TeamBattle)):
-            current_player_id = battle.current_turn_player.id if isinstance(battle, Battle) else battle.current_turn_player_id
-
-        if ctx.author.id != current_player_id: return None, None
-        
-        return battle, current_player_id        
+            
+        except asyncio.TimeoutError: 
+            return await ctx.send("시간이 초과되어 대결이 취소되었습니다.")
 
 
     
@@ -347,53 +343,37 @@ class BattleCog(commands.Cog):
     async def attack(self, ctx, target_user: discord.Member = None):
         battle = self.active_battles.get(ctx.channel.id)
         if not battle: return
-        
-        # 1:1 대결과 팀 대결의 현재 턴 플레이어 확인 방식이 다름
-        current_player_id = battle.current_turn_player.id if isinstance(battle, Battle) else battle.current_turn_player_id
-        if ctx.author.id != current_player_id:
-            return await ctx.send("자신의 턴이 아닙니다.", delete_after=5)
 
-        # 1:1 대결의 경우 자동으로 상대방을 타겟으로 설정
-        if isinstance(battle, Battle):
-            if not target_user:
-                target_user = battle.p2_user if ctx.author.id == battle.p1_user.id else battle.p1_user
-            attacker = battle.get_player_stats(ctx.author)
-            target = battle.get_player_stats(target_user)
-        # 팀 대결의 경우 타겟을 명시해야 함
-        elif isinstance(battle, TeamBattle):
-            if not target_user:
-                return await ctx.send("팀 대결에서는 공격할 대상을 `@멘션`으로 지정해주세요.")
-            
-            attacker_id = ctx.author.id
-            target_id = target_user.id
-            
-            # 상대 팀원인지 확인
-            is_target_valid = False
-            if attacker_id in battle.team_a_ids and target_id in battle.team_b_ids:
-                is_target_valid = True
-            elif attacker_id in battle.team_b_ids and target_id in battle.team_a_ids:
-                is_target_valid = True
-            
-            if not is_target_valid:
-                return await ctx.send("❌ 같은 팀원이거나 유효하지 않은 대상은 공격할 수 없습니다.", delete_after=10)
-            
-            attacker = battle.players[ctx.author.id]
+        # --- 1. 턴 확인 및 공격자 정보 가져오기 ---
+        attacker = None
+        if isinstance(battle, PveBattle):
+            if battle.current_turn != "player": return await ctx.send("플레이어의 턴이 아닙니다.", delete_after=5)
+            attacker = battle.player_stats
+        elif isinstance(battle, (Battle, TeamBattle)):
+            current_player_id = battle.current_turn_player.id if isinstance(battle, Battle) else battle.current_turn_player_id
+            if ctx.author.id != current_player_id: return await ctx.send("자신의 턴이 아닙니다.", delete_after=5)
+            if battle.turn_actions_left <= 0: return await ctx.send("행동력이 없습니다.", delete_after=10)
+            attacker = battle.players[ctx.author.id] if isinstance(battle, TeamBattle) else battle.get_player_stats(ctx.author)
+
+        # --- 2. 타겟 정보 가져오기 및 유효성 검사 ---
+        target = None
+        if isinstance(battle, PveBattle):
+            target = battle.monster_stats
+        elif isinstance(battle, Battle): # 1:1 대결
+            # 멘션이 없으면 자동으로 상대를 타겟으로 지정
+            opponent_user = battle.p2_user if ctx.author.id == battle.p1_user.id else battle.p1_user
+            target = battle.get_player_stats(target_user or opponent_user)
+        elif isinstance(battle, TeamBattle): # 팀 대결
+            if not target_user: return await ctx.send("팀 대결에서는 공격할 대상을 `@멘션`으로 지정해주세요.")
+            if target_user.id not in battle.players: return await ctx.send("유효하지 않은 대상입니다.", delete_after=10)
+            # 상대팀인지 확인
+            is_opponent = (ctx.author.id in battle.team_a_ids and target_user.id in battle.team_b_ids) or \
+                          (ctx.author.id in battle.team_b_ids and target_user.id in battle.team_a_ids)
+            if not is_opponent: return await ctx.send("❌ 같은 팀원은 공격할 수 없습니다.", delete_after=10)
             target = battle.players[target_user.id]
 
-        # 거리 계산
-        distance = battle.get_distance(attacker['pos'], target['pos'])
-        
-        can_attack, attack_type = False, ""
-        if attacker['class'] == '마법사' and 3 <= distance <= 5: 
-            can_attack, attack_type = True, "원거리"
-        elif attacker['class'] == '마검사':
-            if distance == 1: can_attack, attack_type = True, "근거리"
-            elif 2 <= distance <= 3: can_attack, attack_type = True, "원거리"
-        elif attacker['class'] == '검사' and distance == 1: 
-            can_attack, attack_type = True, "근거리"
+        if not target: return await ctx.send("공격 대상을 찾을 수 없습니다.", delete_after=10)
 
-        if not can_attack:
-            return await ctx.send("❌ 공격 사거리가 아닙니다.", delete_after=10)
             
         # 데미지 계산
         base_damage = attacker['physical'] + random.randint(0, attacker['mental']) if attack_type == "근거리" else attacker['mental'] + random.randint(0, attacker['physical'])
@@ -440,65 +420,50 @@ class BattleCog(commands.Cog):
         target['current_hp'] = max(0, target['current_hp'] - final_damage)
         battle.add_log(f"💥 {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해를 입혔습니다!")
 
-        # 공격 후 체력이 0이 되어 전투가 끝났을 때
-        # 공격 후 체력이 0이 되어 전투가 끝났을 때
         if target['current_hp'] <= 0:
-            # 팀 대결일 경우, 팀 전체가 전멸했는지 확인
-            if isinstance(battle, TeamBattle):
-                # check_game_over가 end_battle을 호출하고 전투 목록에서 제거
-                await battle.check_game_over()
-            
-            # 1:1 대결일 경우
+            if isinstance(battle, PveBattle): await battle.end_battle(win=True)
             elif isinstance(battle, Battle):
-                # 승리 처리 후 전투 목록에서 제거
-                await battle.end_battle(ctx.author, f"{target['name']}의 체력이 0이 되어 전투에서 승리했습니다!")
-                if ctx.channel.id in self.active_battles:
+                await battle.end_battle(ctx.author, f"{target['name']}이(가) 공격을 받고 쓰러졌습니다!")
+                if ctx.channel.id in self.active_battles: del self.active_battles[ctx.channel.id]
+            elif isinstance(battle, TeamBattle):
+                is_over = await battle.check_game_over()
+                if is_over and ctx.channel.id in self.active_battles:
                     del self.active_battles[ctx.channel.id]
-            
-            # PvE 사냥일 경우
-            elif isinstance(battle, PveBattle):
-                # 승리 처리 (end_battle 내부에서 목록 제거)
-                await battle.end_battle(win=True)
-
-        # 전투가 계속될 경우
         else:
-            if isinstance(battle, PveBattle):
-                # 몬스터 턴 진행
-                await battle.monster_turn()
-            else:
-                # PvP 턴 넘기기
-                await battle.handle_action_cost(1)
-
+            if isinstance(battle, PveBattle): await battle.monster_turn()
+            else: await battle.handle_action_cost(1)
             
+   # cogs/battle.py 의 BattleCog 클래스 내부
+
     @commands.command(name="이동")
     async def move(self, ctx, *directions):
+        # 1. 공통 함수로 전투 정보 및 턴 확인
         battle, current_player_id = await self.get_current_player_and_battle(ctx)
         if not battle: return
 
+        # 2. PvE 상황에서는 이동 불가
         if isinstance(battle, PveBattle):
             return await ctx.send("사냥 중에는 이동할 수 없습니다.")
-        
-        current_player_id = battle.current_turn_player.id if isinstance(battle, Battle) else battle.current_turn_player_id
-        if ctx.author.id != current_player_id or battle.turn_actions_left <= 0:
-            return
 
+        # 3. PvP 행동력 확인
+        if battle.turn_actions_left <= 0:
+            return await ctx.send("행동력이 없습니다.", delete_after=10)
+
+        # 4. 플레이어 정보 및 이동력 계산
         if isinstance(battle, Battle):
             p_stats = battle.get_player_stats(ctx.author)
-            opponent_pos = battle.get_opponent_stats(ctx.author)['pos']
-        else:  # TeamBattle
+        else: # TeamBattle
             p_stats = battle.players[ctx.author.id]
-            # 팀전에서는 모든 다른 플레이어 위치 확인
-            occupied_positions = [battle.players[pid]['pos'] for pid in battle.players if pid != ctx.author.id]
 
-        # 이동력 계산
         effects = p_stats.get('effects', {})
         mobility_modifier = effects.get('mobility_modifier', 0)
         base_mobility = 2 if p_stats['class'] == '검사' else 1
         final_mobility = max(1, base_mobility + mobility_modifier)
 
         if not (1 <= len(directions) <= final_mobility):
-            return await ctx.send(f"👉 현재 이동력은 **{final_mobility}**입니다. 1개에서 {final_mobility}개 사이의 방향을 입력해주세요.", delete_after=10)
+            return await ctx.send(f"👉 현재 이동력은 **{final_mobility}**입니다. 1~{final_mobility}개의 방향을 입력해주세요.", delete_after=10)
         
+        # 5. 경로 계산 및 유효성 검사
         current_pos = p_stats['pos']
         path = [current_pos]
         
@@ -509,48 +474,57 @@ class BattleCog(commands.Cog):
             elif direction.lower() == 'a': next_pos -= 1
             elif direction.lower() == 'd': next_pos += 1
             
-            # 맵 경계 및 좌우 이동 유효성 검사
             if not (0 <= next_pos < 15) or \
-            (direction.lower() in 'ad' and path[-1] // 5 != next_pos // 5):
+               (direction.lower() in 'ad' and path[-1] // 5 != next_pos // 5):
                 return await ctx.send("❌ 맵 밖으로 이동할 수 없습니다.", delete_after=10)
             path.append(next_pos)
         
         final_pos = path[-1]
         
-        # 다른 플레이어와 겹치는지 확인
+        # 6. 다른 플레이어와 위치가 겹치는지 확인
+        occupied_positions = []
         if isinstance(battle, Battle):
-            if final_pos == opponent_pos:
-                return await ctx.send("❌ 상대방이 있는 칸으로 이동할 수 없습니다.", delete_after=10)
-        else:  # TeamBattle
-            if final_pos in occupied_positions:
-                return await ctx.send("❌ 다른 플레이어가 있는 칸으로 이동할 수 없습니다.", delete_after=10)
+            occupied_positions.append(battle.get_opponent_stats(ctx.author)['pos'])
+        else: # TeamBattle
+            occupied_positions = [p['pos'] for p_id, p in battle.players.items() if p_id != ctx.author.id]
+
+        if final_pos in occupied_positions:
+            return await ctx.send("❌ 다른 플레이어가 있는 칸으로 이동할 수 없습니다.", delete_after=10)
         
-        # 상태 업데이트
+        # 7. 상태 업데이트 및 턴 소모
         battle.grid[current_pos] = "□"
         battle.grid[final_pos] = p_stats['emoji']
         p_stats['pos'] = final_pos
         battle.add_log(f"🚶 {p_stats['name']}이(가) 이동했습니다.")
         await battle.handle_action_cost(1)
 
+# cogs/battle.py 의 BattleCog 클래스 내부
+
     @commands.command(name="특수")
     async def special_ability(self, ctx):
+        # 1. 공통 함수로 전투 정보 및 턴 확인
         battle, current_player_id = await self.get_current_player_and_battle(ctx)
         if not battle: return
 
-        current_player_id = battle.current_turn_player.id if isinstance(battle, Battle) else battle.current_turn_player_id
-        if ctx.author.id != current_player_id:
-            return await ctx.send("자신의 턴이 아닙니다.", delete_after=5)
+        # 2. PvE 상황에서는 특수 능력 사용 불가 (스킬만 사용 가능)
+        if isinstance(battle, PveBattle):
+            return await ctx.send("사냥 중에는 기본 특수 능력을 사용할 수 없습니다. (`!스킬`을 사용해주세요)")
 
+        # 3. PvP 행동력 및 쿨다운 확인
+        if battle.turn_actions_left <= 0:
+            return await ctx.send("행동력이 없습니다.", delete_after=10)
+        
         if isinstance(battle, Battle):
             p_stats = battle.get_player_stats(ctx.author)
-        else:  # TeamBattle
+        else: # TeamBattle
             p_stats = battle.players[ctx.author.id]
             
         if p_stats['special_cooldown'] > 0:
             return await ctx.send(f"쿨타임이 {p_stats['special_cooldown']}턴 남았습니다.", delete_after=10)
 
-        # 직업별 특수 능력
+        # 4. 직업별 특수 능력 시전
         player_class = p_stats['class']
+        
         if player_class == '마법사':
             empty_cells = [str(i+1) for i, cell in enumerate(battle.grid) if cell == "□"]
             await ctx.send(f"**텔레포트**: 이동할 위치의 번호를 입력해주세요. (1~15)\n> 가능한 위치: `{'`, `'.join(empty_cells)}`")
@@ -558,14 +532,20 @@ class BattleCog(commands.Cog):
             try:
                 msg = await self.bot.wait_for('message', check=check, timeout=30.0)
                 target_pos = int(msg.content) - 1
-                if battle.grid[target_pos] != "□":
+                
+                occupied_positions = []
+                if isinstance(battle, Battle):
+                    occupied_positions.append(battle.get_opponent_stats(ctx.author)['pos'])
+                else: # TeamBattle
+                    occupied_positions = [p['pos'] for p_id, p in battle.players.items() if p_id != ctx.author.id]
+
+                if battle.grid[target_pos] != "□" or target_pos in occupied_positions:
                     return await ctx.send("해당 위치는 비어있지 않습니다. 다시 시도해주세요.")
                 
                 battle.grid[p_stats['pos']] = "□"
                 p_stats['pos'] = target_pos
                 battle.grid[target_pos] = p_stats['emoji']
                 battle.add_log(f"✨ {p_stats['name']}이(가) {target_pos+1}번 위치로 텔레포트했습니다!")
-
             except asyncio.TimeoutError: 
                 return await ctx.send("시간이 초과되어 취소되었습니다.")
 
@@ -580,33 +560,35 @@ class BattleCog(commands.Cog):
             p_stats['double_damage_buff'] = 2
             battle.add_log(f"🩸 {p_stats['name']}이(가) 자신의 체력을 소모하여 다음 2회 공격을 강화합니다!")
 
+        # 5. 쿨다운 및 행동력 소모
         p_stats['special_cooldown'] = 2 
         await battle.handle_action_cost(1)
 
 
-
     @commands.command(name="스킬")
     async def use_skill(self, ctx, skill_number: int, target_user: discord.Member = None):
-        battle, current_player_id = await self.get_current_player_and_battle(ctx)
+        battle = self.active_battles.get(ctx.channel.id)
         if not battle: return
 
-        # --- 1. 현재 턴 플레이어 및 기본 정보 확인 ---
+        # --- 1. 공통 조건 확인 (턴, 행동력, 전직 여부 등) ---
         attacker = None
+        # PvE 상황일 때
         if isinstance(battle, PveBattle):
             if battle.current_turn != "player": return await ctx.send("플레이어의 턴이 아닙니다.", delete_after=5)
             attacker = battle.player_stats
+        # PvP 상황일 때
         elif isinstance(battle, (Battle, TeamBattle)):
             current_player_id = battle.current_turn_player.id if isinstance(battle, Battle) else battle.current_turn_player_id
             if ctx.author.id != current_player_id: return await ctx.send("자신의 턴이 아닙니다.", delete_after=5)
             if battle.turn_actions_left <= 0: return await ctx.send("행동력이 없습니다.", delete_after=10)
-            attacker = battle.players[ctx.author.id] if isinstance(battle, TeamBattle) else battle.get_player_stats(ctx.author)
-        
+            attacker = battle.players.get(ctx.author.id) if isinstance(battle, TeamBattle) else battle.get_player_stats(ctx.author)
+
+        if not attacker: return # 플레이어 정보를 찾을 수 없는 경우
+
         if not attacker.get("advanced_class"):
             return await ctx.send("스킬은 상위 직업으로 전직한 플레이어만 사용할 수 있습니다.")
         if attacker.get('special_cooldown', 0) > 0:
             return await ctx.send(f"스킬/특수 능력의 쿨타임이 {attacker['special_cooldown']}턴 남았습니다.", delete_after=10)
-
-        advanced_class = attacker['advanced_class']
 
         # --- 2. 전투 상황에 따라 로직 분기 ---
 
@@ -614,8 +596,8 @@ class BattleCog(commands.Cog):
         if isinstance(battle, PveBattle):
             if skill_number != 1:
                 return await ctx.send("사냥 중에는 1번 스킬만 사용할 수 있습니다.")
-
-            # 힐러/디펜더는 자신에게, 나머지는 몬스터를 타겟으로 자동 설정
+            
+            advanced_class = attacker['advanced_class']
             target = attacker if advanced_class in ['힐러', '디펜더'] else battle.monster_stats
             
             # --- PvE 전용 1번 스킬 효과 적용 ---
@@ -672,10 +654,15 @@ class BattleCog(commands.Cog):
             if not target_user:
                 return await ctx.send("PvP에서는 스킬 대상을 `@멘션`으로 지정해야 합니다.")
             
-            target_id = target_user.id
-            target = battle.players.get(target_id) if isinstance(battle, TeamBattle) else (battle.get_player_stats(target_user) if target_id in [battle.p1_user.id, battle.p2_user.id] else None)
+            target = None
+            if isinstance(battle, TeamBattle):
+                if target_user.id in battle.players: target = battle.players[target_user.id]
+            else: # 1:1 대결
+                if target_user.id in [battle.p1_user.id, battle.p2_user.id]: target = battle.get_player_stats(target_user)
+            
             if not target: return await ctx.send("유효하지 않은 대상입니다.", delete_after=10)
-
+            
+            advanced_class = attacker['advanced_class']
             # --- PvP 전용 스킬 로직 ---
             if advanced_class == "캐스터":
                 distance = battle.get_distance(attacker['pos'], target['pos'])
@@ -742,12 +729,12 @@ class BattleCog(commands.Cog):
             await battle.handle_action_cost(1)
             
             if isinstance(battle, TeamBattle):
-                await battle.check_game_over()
+                is_over = await battle.check_game_over()
+                if is_over: del self.active_battles[ctx.channel.id]
             elif target['current_hp'] <= 0:
                 await battle.end_battle(ctx.author, f"{target['name']}이(가) 스킬에 맞아 쓰러졌습니다!")
+                del self.active_battles[ctx.channel.id]
             return
-
-
     @commands.command(name="기권")
     async def forfeit(self, ctx):
         battle= await self.get_current_player_and_battle(ctx)

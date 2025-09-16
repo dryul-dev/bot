@@ -1,10 +1,11 @@
+# cogs/school.py (최종 수정 버전)
 
 import discord
 from discord.ext import commands
 import json
 import os
 import asyncio
-import random # ◀◀ 이 줄을 추가해주세요.
+import random
 
 # --- 데이터 관리 함수 ---
 def load_data():
@@ -14,7 +15,7 @@ def load_data():
 def save_data(data):
     with open("player_data.json", 'w', encoding='utf-8') as f: json.dump(data, f, indent=4, ensure_ascii=False)
 
-# --- 아이템 정보 (나중에 여기만 수정하면 됩니다) ---
+# --- 아이템 정보 (모든 이름에서 띄어쓰기 제거) ---
 SHOP_ITEMS = {
     "알사탕": {"price": 5, "description": "없는 맛이 없는 알사탕. 주머니에 넣어두면 마음이 든든하다."},
     "꽃송이": {"price": 10, "description": "감성 한 움큼을 당신에게. 누군가에게 선물하기에 좋다."},
@@ -25,11 +26,7 @@ SHOP_ITEMS = {
     "교내방송발언권": {"price": 100, "description": "이 정도 가격이면 모범생들만 사용하겠지? 전교생에게 하고 싶은 말을 할 수 있다."},
     "???": {"price": 200, "description": "정체를 알 수 없는 수상한 물약. 마시면 어떻게 될까?"}
 }
-
-# 사용해도 사라지지 않는 아이템 목록
 PERMANENT_ITEMS = {"아카데미수건", "인형", "드림캐쳐"}
-
-# 아이템 사용 시 출력되는 메시지
 ITEM_USAGE_TEXT = {
     "알사탕": "입 안에서 도르륵 굴려본다. 작지만 확실한 행복감이 느껴진다.",
     "꽃송이": "한 송이 꽃을 가만히 바라본다. 은은한 향기가 코 끝을 간지럽힌다.",
@@ -47,17 +44,14 @@ ITEM_USAGE_TEXT = {
     ]
 }
 
-# --- School Cog 클래스 ---
 class SchoolCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
     @commands.command(name="주머니")
     async def pocket(self, ctx):
-        """자신의 스쿨 포인트와 보유 아이템을 확인합니다."""
         all_data = load_data()
         player_data = all_data.get(str(ctx.author.id))
-
         if not player_data or not player_data.get("registered"):
             return await ctx.send("먼저 `!등록`을 진행해주세요.")
 
@@ -66,60 +60,43 @@ class SchoolCog(commands.Cog):
         
         embed = discord.Embed(title=f"🎒 {ctx.author.display_name}의 주머니", color=int(player_data['color'][1:], 16))
         embed.add_field(name="🎓 스쿨 포인트", value=f"`{points}` P", inline=False)
-        
-        if not inventory:
-            item_list = "아직 아이템이 없습니다."
-        else:
-            item_list = "\n".join(f"- {item}" for item in inventory)
-        
+        item_list = "\n".join(f"- {item}" for item in inventory) if inventory else "아직 아이템이 없습니다."
         embed.add_field(name=f"📦 보유 아이템 ({len(inventory)}/8)", value=item_list, inline=False)
         await ctx.send(embed=embed)
 
-
-
     @commands.command(name="교내상점")
     async def shop(self, ctx):
-        """교내 상점의 상품 목록을 보여줍니다."""
-        embed = discord.Embed(title="🏪 교내 상점", description="`!구매 [아이템 이름]`으로 물건을 구매할 수 있습니다.", color=0x00308F)
-        
+        embed = discord.Embed(title="🏪 교내 상점", description="`!구매 [아이템 이름]`으로 물건을 구매할 수 있습니다.\n(띄어쓰기는 붙여서 입력해주세요. 예: 아카데미수건)", color=0x00308F)
         for name, data in SHOP_ITEMS.items():
             embed.add_field(name=f"{name}", value=f"> `{data['price']}` P", inline=True)
-            
         embed.set_footer(text="남은 청춘을 즐겨라, 아해들아!")
         await ctx.send(embed=embed)
 
     @commands.command(name="구매")
-    async def buy_item(self, ctx, *, item_name: str):
-        """교내 상점에서 아이템을 구매합니다."""
+    async def buy_item(self, ctx, *, item_name_input: str):
+        item_name = item_name_input.replace(" ", "") # 입력값의 띄어쓰기 제거
         if item_name not in SHOP_ITEMS:
-            return await ctx.send("상점에서 판매하지 않는 아이템입니다.")
-
+            return await ctx.send("상점에서 판매하지 않는 아이템입니다. 띄어쓰기는 붙여서 입력했는지 확인해주세요.")
+        
         all_data = load_data()
-        player_id = str(ctx.author.id)
-        player_data = all_data.get(player_id)
+        player_data = all_data.get(str(ctx.author.id))
         if not player_data: return await ctx.send("먼저 `!등록`을 진행해주세요.")
 
         item_info = SHOP_ITEMS[item_name]
         points = player_data.get("school_points", 0)
         inventory = player_data.get("inventory", [])
 
-        if len(inventory) >= 8:
-            return await ctx.send("주머니가 가득 차서 더 이상 아이템을 구매할 수 없습니다.")
-        if points < item_info['price']:
-            return await ctx.send("스쿨 포인트가 부족합니다.")
+        if len(inventory) >= 8: return await ctx.send("주머니가 가득 차서 더 이상 아이템을 구매할 수 없습니다.")
+        if points < item_info['price']: return await ctx.send("스쿨 포인트가 부족합니다.")
 
         embed = discord.Embed(title="🛒 구매 확인", description=item_info['description'], color=int(player_data['color'][1:], 16))
-        embed.add_field(name="아이템", value=item_name, inline=True)
-        embed.add_field(name="가격", value=f"`{item_info['price']}` P", inline=True)
-        embed.add_field(name="구매 후 포인트", value=f"`{points - item_info['price']}` P", inline=True)
+        embed.add_field(name="아이템", value=item_name, inline=True); embed.add_field(name="가격", value=f"`{item_info['price']}` P", inline=True); embed.add_field(name="구매 후 포인트", value=f"`{points - item_info['price']}` P", inline=True)
         embed.set_footer(text="구매하시려면 30초 안에 '예'를 입력해주세요.")
         await ctx.send(embed=embed)
 
         def check(m): return m.author == ctx.author and m.channel == ctx.channel and m.content.lower() == '예'
-        try:
-            await self.bot.wait_for('message', check=check, timeout=30.0)
-        except asyncio.TimeoutError:
-            return await ctx.send("시간이 초과되어 구매가 취소되었습니다.")
+        try: await self.bot.wait_for('message', check=check, timeout=30.0)
+        except asyncio.TimeoutError: return await ctx.send("시간이 초과되어 구매가 취소되었습니다.")
 
         player_data['school_points'] -= item_info['price']
         inventory.append(item_name)
@@ -127,87 +104,60 @@ class SchoolCog(commands.Cog):
         save_data(all_data)
         await ctx.send(f"**{item_name}** 구매를 완료했습니다!")
 
-# cogs/school.py 의 SchoolCog 클래스 내부
-
     @commands.command(name="버리기")
-    async def discard_item(self, ctx, *, item_name: str):
-        """주머니에 있는 아이템을 버립니다."""
+    async def discard_item(self, ctx, *, item_name_input: str):
+        item_name = item_name_input.replace(" ", "")
         all_data = load_data()
-        player_id = str(ctx.author.id)
-        player_data = all_data.get(player_id)
-        
-        if not player_data:
-            return await ctx.send("먼저 `!등록`을 진행해주세요.")
+        player_data = all_data.get(str(ctx.author.id))
+        if not player_data: return await ctx.send("먼저 `!등록`을 진행해주세요.")
 
         inventory = player_data.get("inventory", [])
-        if item_name not in inventory:
-            return await ctx.send(f"'{item_name}' 아이템을 가지고 있지 않습니다.")
+        if item_name not in inventory: return await ctx.send(f"'{item_name}' 아이템을 가지고 있지 않습니다.")
 
-        embed = discord.Embed(
-            title="🗑️ 아이템 버리기 확인",
-            description=f"정말로 **{item_name}** 아이템을 버리시겠습니까?\n버린 아이템은 되찾을 수 없습니다.",
-            color=discord.Color.red()
-        )
+        embed = discord.Embed(title="🗑️ 아이템 버리기 확인", description=f"정말로 **{item_name}** 아이템을 버리시겠습니까?\n버린 아이템은 되찾을 수 없습니다.", color=discord.Color.red())
         embed.set_footer(text="동의하시면 30초 안에 '예'를 입력해주세요.")
         await ctx.send(embed=embed)
 
-        def check(m):
-            return m.author == ctx.author and m.channel == ctx.channel and m.content.lower() == '예'
-        
-        try:
-            await self.bot.wait_for('message', check=check, timeout=30.0)
-        except asyncio.TimeoutError:
-            return await ctx.send("시간이 초과되어 아이템 버리기가 취소되었습니다.")
+        def check(m): return m.author == ctx.author and m.channel == ctx.channel and m.content.lower() == '예'
+        try: await self.bot.wait_for('message', check=check, timeout=30.0)
+        except asyncio.TimeoutError: return await ctx.send("시간이 초과되어 아이템 버리기가 취소되었습니다.")
 
         inventory.remove(item_name)
         player_data["inventory"] = inventory
         save_data(all_data)
-
         await ctx.send(f"**{item_name}** 아이템을 성공적으로 버렸습니다.")
 
     @commands.command(name="선물")
-    async def gift_item(self, ctx, target_user: discord.Member, *, item_name: str):
-        """자신의 아이템을 다른 사람에게 선물합니다. 사용법: !선물 @대상 "아이템 이름" """
-        if ctx.author == target_user:
-            return await ctx.send("자기 자신에게는 선물을 보낼 수 없습니다.")
+    async def gift_item(self, ctx, target_user: discord.Member, *, item_name_input: str):
+        item_name = item_name_input.replace(" ", "")
+        if ctx.author == target_user: return await ctx.send("자기 자신에게는 선물을 보낼 수 없습니다.")
             
         all_data = load_data()
-        sender_id, receiver_id = str(ctx.author.id), str(target_user.id)
-        sender_data, receiver_data = all_data.get(sender_id), all_data.get(receiver_id)
-
-        if not sender_data or not receiver_data:
-            return await ctx.send("선물을 보내거나 받는 사람 중 등록되지 않은 유저가 있습니다.")
+        sender_data, receiver_data = all_data.get(str(ctx.author.id)), all_data.get(str(target_user.id))
+        if not sender_data or not receiver_data: return await ctx.send("선물을 보내거나 받는 사람 중 등록되지 않은 유저가 있습니다.")
 
         sender_inventory = sender_data.get("inventory", [])
-        if item_name not in sender_inventory:
-            return await ctx.send(f"'{item_name}' 아이템을 가지고 있지 않습니다.")
+        if item_name not in sender_inventory: return await ctx.send(f"'{item_name}' 아이템을 가지고 있지 않습니다.")
 
         receiver_inventory = receiver_data.get("inventory", [])
-        if len(receiver_inventory) >= 8:
-            return await ctx.send(f"{target_user.display_name}님의 주머니가 가득 차서 선물을 보낼 수 없습니다.")
+        if len(receiver_inventory) >= 8: return await ctx.send(f"{target_user.display_name}님의 주머니가 가득 차서 선물을 보낼 수 없습니다.")
         
         sender_inventory.remove(item_name)
         receiver_inventory.append(item_name)
-        sender_data["inventory"] = sender_inventory
-        receiver_data["inventory"] = receiver_inventory
         save_data(all_data)
-
         await ctx.send(f"🎁 {target_user.display_name}님에게 **{item_name}**을(를) 선물했습니다!")
 
     @commands.command(name="사용")
-    async def use_item(self, ctx, *, item_name: str):
-        """주머니에 있는 아이템을 사용합니다."""
+    async def use_item(self, ctx, *, item_name_input: str):
+        item_name = item_name_input.replace(" ", "")
         all_data = load_data()
-        player_id = str(ctx.author.id)
-        player_data = all_data.get(player_id)
+        player_data = all_data.get(str(ctx.author.id))
         if not player_data: return await ctx.send("먼저 `!등록`을 진행해주세요.")
 
         inventory = player_data.get("inventory", [])
-        if item_name not in inventory:
-            return await ctx.send(f"'{item_name}' 아이템을 가지고 있지 않습니다.")
+        if item_name not in inventory: return await ctx.send(f"'{item_name}' 아이템을 가지고 있지 않습니다.")
         
         usage_text_source = ITEM_USAGE_TEXT.get(item_name)
-        
         if isinstance(usage_text_source, list):
             usage_text = random.choice(usage_text_source)
         else:
@@ -217,12 +167,9 @@ class SchoolCog(commands.Cog):
         
         if item_name not in PERMANENT_ITEMS:
             inventory.remove(item_name)
-            player_data["inventory"] = inventory
             save_data(all_data)
             embed.set_footer(text=f"사용한 {item_name} 아이템이 사라졌습니다.")
-
         await ctx.send(embed=embed)
 
-# 봇에 Cog를 추가하기 위한 필수 함수
 async def setup(bot):
     await bot.add_cog(SchoolCog(bot))
