@@ -183,13 +183,6 @@ class BattleCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.active_battles = bot.active_battles
-        print("BattleCog가 성공적으로 초기화되었습니다.")
-
-    @commands.command(name="ping_battle")
-    async def ping_battle(self, ctx):
-        """BattleCog가 살아있는지 확인하는 테스트 명령어"""
-        await ctx.send("✅ Battle Cog에서 응답!")
-
 
     @commands.command(name="대결")
     async def battle_request(self, ctx, opponent: discord.Member):
@@ -326,9 +319,11 @@ class BattleCog(commands.Cog):
 
 # cogs/battle.py 의 BattleCog 클래스 내부
 
+# cogs/battle.py 의 BattleCog 클래스 내부
+
     @commands.command(name="공격")
     async def attack(self, ctx, target_user: discord.Member = None):
-        battle, _ = await self.get_current_player_and_battle(ctx)
+        battle, current_player_id = await self.get_current_player_and_battle(ctx)
         if not battle: return
 
         attacker, target = None, None
@@ -350,7 +345,7 @@ class BattleCog(commands.Cog):
             if not is_opponent: return await ctx.send("❌ 같은 팀원은 공격할 수 없습니다.", delete_after=10)
             attacker = battle.players[ctx.author.id]
             target = battle.players[target_user.id]
-        
+
         if not attacker or not target: return
 
         # --- 2. 공격 가능 여부 확인 ---
@@ -361,8 +356,9 @@ class BattleCog(commands.Cog):
         else: # PvP
             distance = battle.get_distance(attacker['pos'], target['pos'])
             if attacker['class'] == '마법사' and 3 <= distance <= 5: can_attack, attack_type = True, "원거리"
-            elif attacker['class'] == '마검사' and (distance == 1 or 2 <= distance <= 3):
-                attack_type = "근거리" if distance == 1 else "원거리"; can_attack = True
+            elif attacker['class'] == '마검사':
+                if distance == 1: can_attack, attack_type = True, "근거리"
+                elif 2 <= distance <= 3: can_attack, attack_type = True, "원거리"
             elif attacker['class'] == '검사' and distance == 1: can_attack, attack_type = True, "근거리"
         
         if not can_attack: return await ctx.send("❌ 공격 사거리가 아닙니다.", delete_after=10)
@@ -370,13 +366,12 @@ class BattleCog(commands.Cog):
         # --- 3. 데미지 계산 ---
         base_damage = attacker['physical'] + random.randint(0, attacker['mental']) if attack_type == "근거리" else attacker['mental'] + random.randint(0, attacker['physical'])
         multiplier, attribute_damage = 1.0, 0
+        
         attacker_effects = attacker.get('effects', {})
         if 'next_attack_multiplier' in attacker_effects:
-            multiplier = attacker_effects.pop('next_attack_multiplier', 1.0)
-            battle.add_log(f"✨ 영창 효과 발동! 데미지가 {multiplier}배 증폭됩니다!")
+            multiplier = attacker_effects.pop('next_attack_multiplier', 1.0); battle.add_log(f"✨ 영창 효과! 데미지가 {multiplier}배 증폭!")
         elif attacker.get('double_damage_buff', 0) > 0:
-            multiplier = 2.0; attacker['double_damage_buff'] -= 1
-            battle.add_log(f"🔥 분노의 일격! (남은 횟수: {attacker['double_damage_buff']}회)")
+            multiplier = 2.0; attacker['double_damage_buff'] -= 1; battle.add_log(f"🔥 분노의 일격! (남은 횟수: {attacker['double_damage_buff']}회)")
         elif random.random() < 0.10: 
             multiplier = 2.0; battle.add_log(f"💥 치명타 발생!")
         else:
@@ -386,11 +381,9 @@ class BattleCog(commands.Cog):
         advantages = {'Wit': 'Gut', 'Gut': 'Heart', 'Heart': 'Wit'}
         if attacker.get('attribute') and target.get('attribute'):
             if advantages.get(attacker['attribute']) == target['attribute']:
-                bonus = random.randint(0, attacker['level']); attribute_damage += bonus
-                battle.add_log(f"👍 상성 우위! 추가 데미지 +{bonus}")
+                bonus = random.randint(0, attacker['level']); attribute_damage += bonus; battle.add_log(f"👍 상성 우위! +{bonus} 데미지!")
             elif advantages.get(target['attribute']) == attacker['attribute']:
-                penalty = random.randint(0, attacker['level']); attribute_damage -= penalty
-                battle.add_log(f"👎 상성 열세... 데미지 감소 -{penalty}")
+                penalty = random.randint(0, attacker['level']); attribute_damage -= penalty; battle.add_log(f"👎 상성 열세... -{penalty} 데미지")
         
         final_damage = max(1, round(base_damage * multiplier) + attribute_damage - target.get('defense', 0))
 
@@ -399,8 +392,7 @@ class BattleCog(commands.Cog):
         battle.add_log(f"💥 {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해를 입혔습니다!")
 
         if target['current_hp'] <= 0:
-            if battle.battle_type == "pve":
-                await battle.end_battle(win=True)
+            if battle.battle_type == "pve": await battle.end_battle(win=True)
             elif battle.battle_type == "pvp_1v1":
                 await battle.end_battle(ctx.author, f"{target['name']}이(가) 공격을 받고 쓰러졌습니다!")
                 if ctx.channel.id in self.active_battles: del self.active_battles[ctx.channel.id]
@@ -408,28 +400,30 @@ class BattleCog(commands.Cog):
                 if await battle.check_game_over(): 
                     if ctx.channel.id in self.active_battles: del self.active_battles[ctx.channel.id]
         else:
-            if battle.battle_type == "pve":
-                await battle.monster_turn()
-            else: # PvP
-                await battle.handle_action_cost(1)
+            if battle.battle_type == "pve": await battle.monster_turn()
+            else: await battle.handle_action_cost(1)
 
         
     @commands.command(name="특수")
     async def special_ability(self, ctx):
-        battle, _ = await self.get_current_player_and_battle(ctx)
+        # 1. 헬퍼 함수로 턴 확인을 한번에 끝냅니다.
+        battle, current_player_id = await self.get_current_player_and_battle(ctx)
         if not battle: return
-        # PvE 상황에서는 사용 불가
+
+        # 2. PvE 상황에서는 사용 불가 처리
         if battle.battle_type == "pve":
             return await ctx.send("사냥 중에는 기본 특수 능력을 사용할 수 없습니다. (`!스킬`을 사용해주세요)")
 
-        # 이하 PvP 전용 로직
+        # 3. PvP 행동력 및 쿨다운 확인
         if battle.turn_actions_left <= 0:
             return await ctx.send("행동력이 없습니다.", delete_after=10)
         
+        # 4. 플레이어 정보 가져오기 (Battle, TeamBattle 모두 처리)
         p_stats = battle.players.get(current_player_id) if battle.battle_type == "pvp_team" else battle.get_player_stats(ctx.author)
             
-        if p_stats['special_cooldown'] > 0:
+        if p_stats.get('special_cooldown', 0) > 0:
             return await ctx.send(f"쿨타임이 {p_stats['special_cooldown']}턴 남았습니다.", delete_after=10)
+
 
         # 4. 직업별 특수 능력 시전
         player_class = p_stats['class']
@@ -475,7 +469,7 @@ class BattleCog(commands.Cog):
 
     @commands.command(name="스킬")
     async def use_skill(self, ctx, skill_number: int, target_user: discord.Member = None):
-        battle, _ = await self.get_current_player_and_battle(ctx)
+        battle, current_player_id = await self.get_current_player_and_battle(ctx)
         if not battle: return
         attacker = None
         if battle.battle_type == "pve":

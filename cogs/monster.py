@@ -96,6 +96,24 @@ class MonsterCog(commands.Cog):
         if ctx.channel.id in self.active_battles: return await ctx.send("이 채널에서는 이미 다른 활동이 진행중입니다.")
         battle = PveBattle(ctx.channel, ctx.author, self.active_battles); self.active_battles[ctx.channel.id] = battle
         embed = discord.Embed(title=f"몬스터 출현! - {battle.monster_stats['name']} (Lv.{battle.monster_stats['level']})", color=0xDC143C); embed.add_field(name=f"{battle.player_stats['name']} (Lv.{battle.player_stats['level']})", value=f"HP: {battle.player_stats['current_hp']}/{battle.player_stats['hp']}", inline=True); embed.add_field(name=f"{battle.monster_stats['name']}", value=f"HP: {battle.monster_stats['current_hp']}/{battle.monster_stats['hp']}", inline=True); embed.set_footer(text="당신의 턴입니다. (`!공격`, `!스킬 1`, `!도망`)"); await ctx.send(embed=embed); await battle.start_turn_timer()
+        # cogs/monster.py 의 MonsterCog 클래스 내부
+
+    @commands.command(name="도망")
+    async def flee(self, ctx):
+        """진행 중인 몬스터와의 전투에서 도망칩니다."""
+        battle = self.active_battles.get(ctx.channel.id)
+        
+        # 현재 사냥 중인지, 본인의 턴이 맞는지 확인
+        if not isinstance(battle, PveBattle) or battle.current_turn != "player" or ctx.author.id != battle.player_user.id:
+            return
+
+        # 50% 확률로 도망 성공
+        if random.random() < 0.5:
+            await battle.end_battle(win=False, reason=f"{ctx.author.display_name}이(가) 전투에서 성공적으로 도망쳤습니다!")
+        else:
+            await ctx.send("도망에 실패했다! 몬스터가 공격해온다!")
+            await asyncio.sleep(1)
+            await battle.monster_turn()
 
 async def setup(bot):
     await bot.add_cog(MonsterCog(bot))
