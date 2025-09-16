@@ -357,6 +357,7 @@ class BattleCog(commands.Cog):
     
     @commands.command(name="공격")
     async def attack(self, ctx, target_user: discord.Member = None):
+        print(f"--- [LOG] !공격 명령어 감지: {ctx.author.name} ---")
         battle = self.active_battles.get(ctx.channel.id)
         if not battle: return
 
@@ -481,6 +482,8 @@ class BattleCog(commands.Cog):
 
     @commands.command(name="이동")
     async def move(self, ctx, *directions):
+        
+
         # 1. 공통 함수로 전투 정보 및 턴 확인
         battle, current_player_id = await self.get_current_player_and_battle(ctx)
         if not battle: return
