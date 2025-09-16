@@ -52,7 +52,7 @@ class PveBattle:
         
         avg_player_damage = (self.player_stats['physical'] + self.player_stats['mental']) / 2 + self.player_stats['level']
         monster_hp = round(max(15, avg_player_damage * random.uniform(3.5, 4.0)))
-        monster_ap = round(max(3, self.player_stats['hp'] / random.uniform(4.5, 6.0)))
+        monster_ap = round(max(3, self.player_stats['hp'] / random.uniform(5.0, 7.0)))
 
         self.monster_stats = {
             "name": monster_name, "level": level, "attribute": monster_template['attribute'], "defense": 0,
@@ -75,13 +75,24 @@ class PveBattle:
         if self.turn_timer: self.turn_timer.cancel()
         if self.channel.id in self.active_battles: del self.active_battles[self.channel.id]
         if win:
-            gold_won = self.monster_stats['level'] * random.randint(5, 10); materials_won = [item['name'] for item in self.monster_stats['drops'] if random.random() < item['chance']]
-            all_data = load_data(); player_data = all_data.get(str(self.player_user.id))
+            gold_won = self.monster_stats['level'] * random.randint(5, 10); 
+            materials_won = [item['name'] for item in self.monster_stats['drops'] if random.random() < item['chance']]
+            all_data = load_data(); 
+            player_data = all_data.get(str(self.player_user.id))
             if player_data:
-                player_data['gold'] = player_data.get('gold', 0) + gold_won; pve_inventory = player_data.get('pve_inventory', []); pve_inventory.extend(materials_won); player_data['pve_inventory'] = pve_inventory; save_data(all_data)
-            embed = discord.Embed(title="🎉 사냥 성공!", description=f"**{self.monster_stats['name']}**을(를) 처치했습니다!", color=discord.Color.gold()); embed.add_field(name="획득 골드", value=f"`{gold_won}` G", inline=True)
-            if materials_won: embed.add_field(name="획득 재료", value="\n".join(f"- {mat}" for mat in materials_won), inline=True)
-            await self.channel.send(embed=embed)
+                # 데이터 업데이트
+                player_data['gold'] = player_data.get('gold', 0) + gold_won
+                pve_inventory = player_data.get('pve_inventory', [])
+                pve_inventory.extend(materials_won)
+                player_data['pve_inventory'] = pve_inventory
+                save_data(all_data)
+
+                # 결과 메시지 생성 및 전송
+                embed = discord.Embed(title="🎉 사냥 성공!", description=f"**{self.monster_stats['name']}**을(를) 처치했습니다!", color=discord.Color.gold())
+                embed.add_field(name="획득 골드", value=f"`{gold_won}` G", inline=True)
+                if materials_won:
+                    embed.add_field(name="획득 재료", value="\n".join(f"- {mat}" for mat in materials_won), inline=True)
+                await self.channel.send(embed=embed)
         else: await self.channel.send(reason if reason else "사냥에 실패했습니다. 보건실에 갑시다.")
 # cogs/monster.py 의 PveBattle 클래스 내부
 

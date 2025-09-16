@@ -325,40 +325,31 @@ class BattleCog(commands.Cog):
         battle, current_player_id = await self.get_current_player_and_battle(ctx)
         if not battle: return
 
-        # --- PvE 전투가 맞는지 최종 확인 ---
-        if battle.battle_type != "pve":
-            return await ctx.send("`[DEBUG]` 현재 PvE 전투가 아니므로, PvP 공격 로직을 실행해야 합니다. (이 부분은 테스트를 위해 비활성화됨)")
-
-        await ctx.send("`[DEBUG]` 1. PvE 전투 확인 완료.")
-
         # --- 공격자 및 타겟 정보 설정 ---
         attacker = battle.player_stats
         target = battle.monster_stats
-        if not attacker or not target:
-            return await ctx.send("`[DEBUG]` 오류: 공격자 또는 타겟 정보 설정에 실패했습니다.")
-        
-        await ctx.send(f"`[DEBUG]` 2. 공격자({attacker['name']}) 및 타겟({target['name']}) 설정 완료.")
+
 
         # --- 공격 타입 결정 ---
         attack_type = "근거리" if attacker['class'] == '검사' else ("근거리" if attacker.get('physical', 0) >= attacker.get('mental', 0) else "원거리")
-        await ctx.send(f"`[DEBUG]` 3. 공격 타입 결정 완료: {attack_type}")
+
 
         # --- 데미지 계산 ---
         base_damage = attacker['physical'] + random.randint(0, attacker['mental']) if attack_type == "근거리" else attacker['mental'] + random.randint(0, attacker['physical'])
         final_damage = max(1, round(base_damage * 1.0)) # 테스트를 위해 모든 배율 제거
-        await ctx.send(f"`[DEBUG]` 4. 데미지 계산 완료: {final_damage}")
+
 
         # --- 데미지 적용 ---
         target['current_hp'] = max(0, target['current_hp'] - final_damage)
         battle.add_log(f"💥 {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해!")
-        await ctx.send("`[DEBUG]` 5. 데미지 적용 및 로그 추가 완료.")
+
 
         # --- 후속 처리 ---
         if target['current_hp'] <= 0:
-            await ctx.send("`[DEBUG]` 6. 몬스터 HP 0 확인, 전투 종료 함수 호출.")
+
             await battle.end_battle(win=True)
         else:
-            await ctx.send("`[DEBUG]` 6. 전투 계속, 몬스터 턴 함수 호출.")
+
             await battle.monster_turn()
 # cogs/battle.py 의 BattleCog 클래스 내부
     '''

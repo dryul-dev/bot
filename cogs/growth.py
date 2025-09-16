@@ -80,7 +80,9 @@ class GrowthCog(commands.Cog):
                 "attribute": None,
                 "advanced_class": None,
                 "school_points": 0,
-                "inventory": []
+                "inventory": [],
+                "gold": 0, # PvE 골드
+                "pve_inventory": []
             }
             save_data(all_data)
             await ctx.send("🎉 등록이 완료되었습니다!")
