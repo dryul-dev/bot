@@ -468,7 +468,7 @@ class GrowthCog(commands.Cog):
             description=f"**{current_blessing}**",
             color=int(player_data['color'][1:], 16)
         )
-        embed.set_footer(text=f"{ctx.author.display_name}님의 하루를 응원합니다.")
+        embed.set_footer(text=f"삼여신의 축복을 당신에게.")
         await ctx.send(embed=embed)
 
     '''
