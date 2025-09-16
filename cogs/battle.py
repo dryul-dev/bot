@@ -255,6 +255,8 @@ class BattleCog(commands.Cog):
             return await ctx.send("시간이 초과되어 대결이 취소되었습니다.")
         
         # 헬퍼 함수
+# cogs/battle.py 의 BattleCog 클래스 내부
+
     async def get_current_player_and_battle(self, ctx):
         """모든 전투 명령어에서 공통으로 사용할 플레이어 및 전투 정보 확인 함수"""
         battle = self.active_battles.get(ctx.channel.id)

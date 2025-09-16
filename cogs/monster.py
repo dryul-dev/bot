@@ -82,9 +82,9 @@ class PveBattle:
             embed = discord.Embed(title="🎉 사냥 성공!", description=f"**{self.monster_stats['name']}**을(를) 처치했습니다!", color=discord.Color.gold()); embed.add_field(name="획득 골드", value=f"`{gold_won}` G", inline=True)
             if materials_won: embed.add_field(name="획득 재료", value="\n".join(f"- {mat}" for mat in materials_won), inline=True)
             await self.channel.send(embed=embed)
-        else: await self.channel.send(reason if reason else "사냥에 실패했다...일단 보건실에 가자.")
+        else: await self.channel.send(reason if reason else "사냥에 실패했습니다. 보건실에 갑시다.")
     async def monster_turn(self):
-        await self.channel.send("--- 몬스터의 턴 ---"); await asyncio.sleep(1.5); monster = self.monster_stats; player = self.player_stats; action_roll = random.random(); log_message = ""
+        await self.channel.send("--- 몬스터의 턴 ---"); monster = self.monster_stats; player = self.player_stats; action_roll = random.random(); log_message = ""
         if action_roll < 0.6:
             damage = max(1, monster['ap'] + random.randint(-monster['level'], monster['level'])); final_damage = max(1, damage - player.get('pve_defense', 0)); player['current_hp'] = max(0, player['current_hp'] - final_damage); log_message = f"👹 **{monster['name']}**의 공격! **{player['name']}**에게 **{final_damage}**의 피해!"
             if player.get('pve_defense', 0) > 0: log_message += " (방어함)"; player['pve_defense'] = 0
@@ -92,7 +92,7 @@ class PveBattle:
         else:
             damage = max(1, monster['ap'] + random.randint(-monster['level'], monster['level'])) * 2; final_damage = max(1, damage - player.get('pve_defense', 0)); player['current_hp'] = max(0, player['current_hp'] - final_damage); log_message = f"💥 **{monster['name']}**의 강한 공격! **{player['name']}**에게 **{final_damage}**의 치명적인 피해!"
             if player.get('pve_defense', 0) > 0: player['pve_defense'] = 0
-        await self.channel.send(embed=discord.Embed(description=log_message, color=0xDC143C)); await asyncio.sleep(2)
+        
         if player['current_hp'] <= 0: await self.end_battle(win=False, reason=f"{monster['name']}의 공격에 쓰러졌습니다..."); return
         self.current_turn = "player"; embed = discord.Embed(title="▶️ 당신의 턴입니다", color=player['color']); embed.add_field(name=f"{player['name']}", value=f"HP: {player['current_hp']}/{player['hp']}", inline=True); embed.add_field(name=f"{monster['name']}", value=f"HP: {monster['current_hp']}/{monster['hp']}", inline=True); await self.channel.send(embed=embed); await self.start_turn_timer()
 

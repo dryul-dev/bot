@@ -48,6 +48,61 @@ class SchoolCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+# cogs/school.py 의 SchoolCog 클래스 내부에 추가
+
+    @commands.command(name="포인트관리")
+    @commands.is_owner() # 봇 소유자만 이 명령어를 사용할 수 있도록 제한
+    async def manage_points(self, ctx, target_user: discord.Member, action: str, amount: int = 0):
+        """[관리자용] 유저의 스쿨 포인트를 관리합니다."""
+        
+        all_data = load_data()
+        target_id = str(target_user.id)
+        player_data = all_data.get(target_id)
+
+        if not player_data or not player_data.get("registered"):
+            return await ctx.send(f"**{target_user.display_name}**님은 아직 등록하지 않은 플레이어입니다.")
+
+        current_points = player_data.get("school_points", 0)
+        action = action.lower() # '추가', '차감', '조회' 등을 소문자로 변환하여 처리
+
+        if action == "조회":
+            embed = discord.Embed(
+                title=f"🎓 {target_user.display_name}님의 포인트 정보",
+                description=f"현재 **{current_points}** 스쿨 포인트를 보유하고 있습니다.",
+                color=int(player_data['color'][1:], 16)
+            )
+            await ctx.send(embed=embed)
+
+        elif action == "추가":
+            if amount <= 0:
+                return await ctx.send("추가할 포인트는 0보다 커야 합니다.")
+            
+            player_data['school_points'] = current_points + amount
+            save_data(all_data)
+            await ctx.send(f"✅ **{target_user.display_name}**님에게 **{amount}** 포인트를 지급했습니다. (총: {player_data['school_points']} P)")
+
+        elif action == "차감":
+            if amount <= 0:
+                return await ctx.send("차감할 포인트는 0보다 커야 합니다.")
+            
+            new_points = max(0, current_points - amount) # 포인트가 음수가 되지 않도록 보정
+            player_data['school_points'] = new_points
+            save_data(all_data)
+            await ctx.send(f"✅ **{target_user.display_name}**님의 포인트를 **{amount}**만큼 차감했습니다. (총: {new_points} P)")
+
+        else:
+            await ctx.send("잘못된 행동입니다. `조회`, `추가`, `차감` 중에서 선택해주세요.")
+
+    # !포인트관리 명령어에서 오류 발생 시 처리
+    @manage_points.error
+    async def manage_points_error(self, ctx, error):
+        if isinstance(error, commands.NotOwner):
+            await ctx.send("이 명령어는 봇 소유자만 사용할 수 있습니다.")
+        elif isinstance(error, commands.MissingRequiredArgument):
+            await ctx.send("사용법: `!포인트관리 @유저 [조회/추가/차감] [값]`")
+        else:
+            await ctx.send(f"명령어 처리 중 오류가 발생했습니다: {error}")
+
     @commands.command(name="주머니")
     async def pocket(self, ctx):
         all_data = load_data()
