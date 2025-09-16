@@ -341,8 +341,17 @@ class BattleCog(commands.Cog):
     
     @commands.command(name="공격")
     async def attack(self, ctx, target_user: discord.Member = None):
+        # ▼▼▼ 디버깅용 print 추가 ▼▼▼
+        print(f"\n[DEBUG/battle.py] !공격 명령어 수신.")
+        print(f"[DEBUG/battle.py] BattleCog가 바라보는 active_battles: {self.active_battles}")
+        # ▲▲▲ 디버깅용 print 추가 ▲▲▲
+
         battle = self.active_battles.get(ctx.channel.id)
-        if not battle: return
+        if not battle:
+            # ▼▼▼ 디버깅용 print 추가 ▼▼▼
+            print(f"[DEBUG/battle.py] 오류: 채널({ctx.channel.id})에서 전투 정보를 찾지 못했습니다. 함수를 종료합니다.")
+            # ▲▲▲ 디버깅용 print 추가 ▲▲▲
+            return
 
         # --- 1. 턴 확인 및 공격자 정보 가져오기 ---
         attacker = None
