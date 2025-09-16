@@ -260,8 +260,21 @@ class BattleCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.active_battles = bot.active_battles # main.py의 목록을 가져옴
+    
     async def get_current_player_and_battle(self, ctx):
-# cogs/battle.py 의 BattleCog 클래스 내부
+            battle = self.active_battles.get(ctx.channel.id)
+            if not battle: return None, None
+            
+            current_player_id = None
+            if isinstance(battle, PveBattle):
+                if battle.current_turn != "player": return None, None
+                current_player_id = battle.player_stats['id']
+            elif isinstance(battle, (Battle, TeamBattle)):
+                current_player_id = battle.current_turn_player.id if isinstance(battle, Battle) else battle.current_turn_player_id
+
+            if ctx.author.id != current_player_id: return None, None
+            
+            return battle, current_player_id
 
     @commands.command(name="대결")
     async def battle_request(self, ctx, opponent: discord.Member):

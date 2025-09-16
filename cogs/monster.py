@@ -69,7 +69,7 @@ class PveBattle:
         except asyncio.CancelledError:
             pass
 
-    async def end_battle(self, win):
+    async def end_battle(self, win, reason=""):
         if self.turn_timer: self.turn_timer.cancel()
         if self.channel.id in self.active_battles: del self.active_battles[self.channel.id]
 
