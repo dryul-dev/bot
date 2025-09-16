@@ -1,3 +1,26 @@
+# cogs/battle.py
+import discord
+from discord.ext import commands
+
+class BattleCog(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+        self.active_battles = bot.active_battles
+        print("BattleCog가 성공적으로 초기화되었습니다.")
+
+    @commands.command(name="ping_battle")
+    async def ping_battle(self, ctx):
+        """BattleCog가 살아있는지 확인하는 테스트 명령어"""
+        await ctx.send("✅ Battle Cog에서 응답!")
+
+async def setup(bot):
+    await bot.add_cog(BattleCog(bot))
+
+
+
+
+'''
+
 import discord
 from discord.ext import commands
 import json
@@ -701,3 +724,5 @@ async def forfeit(self, ctx):
 # 봇에 Cog를 추가하기 위한 필수 함수
 async def setup(bot):
     await bot.add_cog(BattleCog(bot))
+
+    '''
