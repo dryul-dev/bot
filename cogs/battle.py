@@ -324,17 +324,20 @@ class BattleCog(commands.Cog):
         battle.add_log(f"🚶 {p_stats['name']}이(가) 이동했습니다.")
         await battle.handle_action_cost(1)
 
+# cogs/battle.py 의 BattleCog 클래스 내부
+
     @commands.command(name="공격")
     async def attack(self, ctx, target_user: discord.Member = None):
         battle, _ = await self.get_current_player_and_battle(ctx)
         if not battle: return
+
         attacker, target = None, None
         
+        # --- 1. 공격자 및 타겟 정보 설정 ---
         if battle.battle_type == "pve":
             attacker = battle.player_stats
             target = battle.monster_stats
-            await ctx.send("`[DEBUG]` 1. PvE 전투 확인, 공격자/타겟 설정 완료.")
-        elif battle.battle_type in ["pvp_1v1", "pvp_team"]:
+        elif battle.battle_type == "pvp_1v1":
             opponent_user = battle.p2_user if ctx.author.id == battle.p1_user.id else battle.p1_user
             target_user = target_user or opponent_user
             attacker = battle.get_player_stats(ctx.author)
@@ -347,10 +350,10 @@ class BattleCog(commands.Cog):
             if not is_opponent: return await ctx.send("❌ 같은 팀원은 공격할 수 없습니다.", delete_after=10)
             attacker = battle.players[ctx.author.id]
             target = battle.players[target_user.id]
-
+        
         if not attacker or not target: return
 
-        # --- 공격 가능 여부 확인 ---
+        # --- 2. 공격 가능 여부 확인 ---
         can_attack, attack_type = False, ""
         if battle.battle_type == "pve":
             can_attack = True
@@ -358,17 +361,15 @@ class BattleCog(commands.Cog):
         else: # PvP
             distance = battle.get_distance(attacker['pos'], target['pos'])
             if attacker['class'] == '마법사' and 3 <= distance <= 5: can_attack, attack_type = True, "원거리"
-            elif attacker['class'] == '마검사':
-                if distance == 1: can_attack, attack_type = True, "근거리"
-                elif 2 <= distance <= 3: can_attack, attack_type = True, "원거리"
+            elif attacker['class'] == '마검사' and (distance == 1 or 2 <= distance <= 3):
+                attack_type = "근거리" if distance == 1 else "원거리"; can_attack = True
             elif attacker['class'] == '검사' and distance == 1: can_attack, attack_type = True, "근거리"
         
         if not can_attack: return await ctx.send("❌ 공격 사거리가 아닙니다.", delete_after=10)
         
-        # --- 데미지 계산 ---
+        # --- 3. 데미지 계산 ---
         base_damage = attacker['physical'] + random.randint(0, attacker['mental']) if attack_type == "근거리" else attacker['mental'] + random.randint(0, attacker['physical'])
         multiplier, attribute_damage = 1.0, 0
-        
         attacker_effects = attacker.get('effects', {})
         if 'next_attack_multiplier' in attacker_effects:
             multiplier = attacker_effects.pop('next_attack_multiplier', 1.0)
@@ -393,12 +394,11 @@ class BattleCog(commands.Cog):
         
         final_damage = max(1, round(base_damage * multiplier) + attribute_damage - target.get('defense', 0))
 
-        # --- 데미지 적용 및 후속 처리 ---
+        # --- 4. 데미지 적용 및 후속 처리 ---
         target['current_hp'] = max(0, target['current_hp'] - final_damage)
         battle.add_log(f"💥 {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해를 입혔습니다!")
 
         if target['current_hp'] <= 0:
-            await ctx.send("`[DEBUG]` 3. 몬스터 HP 0 확인, 전투 종료.")
             if battle.battle_type == "pve":
                 await battle.end_battle(win=True)
             elif battle.battle_type == "pvp_1v1":
@@ -408,7 +408,6 @@ class BattleCog(commands.Cog):
                 if await battle.check_game_over(): 
                     if ctx.channel.id in self.active_battles: del self.active_battles[ctx.channel.id]
         else:
-            await ctx.send("`[DEBUG]` 3. 전투 계속, 몬스터 턴으로 전환.")
             if battle.battle_type == "pve":
                 await battle.monster_turn()
             else: # PvP

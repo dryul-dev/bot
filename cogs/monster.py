@@ -21,15 +21,40 @@ MONSTER_DATA = {
 
 class PveBattle:
     def __init__(self, channel, player_user, active_battles_ref):
-        self.channel = channel; self.player_user = player_user; self.active_battles = active_battles_ref; self.turn_timer = None; self.battle_type = "pve"
-        player_data = load_data()[str(player_user.id)]
-        level = 1 + ((player_data['mental'] + player_data['physical']) // 5); player_hp = max(1, level * 10 + player_data['physical'])
-        self.player_stats = { "id": player_user.id, "name": player_data['name'], "class": player_data['class'], "advanced_class": player_data.get("advanced_class"), "attribute": player_data.get("attribute"), "mental": player_data['mental'], "physical": player_data['physical'], "level": level, "hp": player_hp, "current_hp": player_hp, "pve_defense": 0, "color": int(player_data['color'][1:], 16), "special_cooldown": 0 }
-        monster_name = random.choice(list(MONSTER_DATA.keys())); monster_template = MONSTER_DATA[monster_name]
-        avg_player_damage = (self.player_stats['physical'] + self.player_stats['mental']) / 2 + self.player_stats['level']; monster_hp = round(max(10, avg_player_damage * random.uniform(3.5, 5.0))); monster_ap = round(max(3, self.player_stats['hp'] / random.uniform(4.5, 6.0)))
-        self.monster_stats = { "name": monster_name, "level": level, "attribute": monster_template['attribute'], "defense": 0, "hp": monster_hp, "current_hp": monster_hp, "ap": monster_ap, "drops": monster_template['drops'] }
-        self.current_turn = "player"
+        self.channel = channel
+        self.player_user = player_user
+        self.active_battles = active_battles_ref
+        self.turn_timer = None
+        self.battle_type = "pve"
+        
+        all_data = load_data()
+        player_data = all_data.get(str(player_user.id), {})
+        
+        level = 1 + ((player_data.get('mental', 0) + player_data.get('physical', 0)) // 5)
+        player_hp = max(1, level * 10 + player_data.get('physical', 0))
+        
+        self.player_stats = {
+            "id": player_user.id, "name": player_data.get('name', 'Unknown'), 
+            "class": player_data.get('class'), "advanced_class": player_data.get("advanced_class"), 
+            "attribute": player_data.get("attribute"), "mental": player_data.get('mental', 0), 
+            "physical": player_data.get('physical', 0), "level": level, "hp": player_hp, 
+            "current_hp": player_hp, "pve_defense": 0,
+            "color": int(player_data.get('color', '#FFFFFF')[1:], 16), "special_cooldown": 0
+        }
 
+        monster_name = random.choice(list(MONSTER_DATA.keys()))
+        monster_template = MONSTER_DATA[monster_name]
+        
+        avg_player_damage = (self.player_stats['physical'] + self.player_stats['mental']) / 2 + self.player_stats['level']
+        monster_hp = round(max(15, avg_player_damage * random.uniform(3.5, 5.0)))
+        monster_ap = round(max(3, self.player_stats['hp'] / random.uniform(4.5, 6.0)))
+
+        self.monster_stats = {
+            "name": monster_name, "level": level, "attribute": monster_template['attribute'], "defense": 0,
+            "hp": monster_hp, "current_hp": monster_hp, "ap": monster_ap,
+            "drops": monster_template['drops']
+        }
+        self.current_turn = "player"
     async def start_turn_timer(self):
         if self.turn_timer: self.turn_timer.cancel()
         self.turn_timer = asyncio.create_task(self.timeout_task())
