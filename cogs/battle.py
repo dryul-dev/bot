@@ -11,18 +11,17 @@ from cogs.monster import PveBattle
 DATA_FILE = "player_data.json"
 
 def load_data():
-    if not os.path.exists(DATA_FILE): return {}
-    with open(DATA_FILE, 'r', encoding='utf-8') as f: return json.load(f)
+    if not os.path.exists("player_data.json"): return {}
+    with open("player_data.json", 'r', encoding='utf-8') as f: return json.load(f)
 
 def save_data(data):
-    with open(DATA_FILE, 'w', encoding='utf-8') as f: json.dump(data, f, indent=4, ensure_ascii=False)
+    with open("player_data.json", 'w', encoding='utf-8') as f: json.dump(data, f, indent=4, ensure_ascii=False)
 
 
 # --- 1:1 전투 관리 클래스 ---
 class Battle:
-    def __init__(self, channel, player1, player2, bot):
+    def __init__(self, channel, player1, player2):
         self.channel = channel
-        self.bot = bot
         self.p1_user = player1
         self.p2_user = player2
         self.grid = ["□"] * 15
@@ -123,17 +122,15 @@ class Battle:
     async def end_battle(self, winner_user, reason):
         if self.turn_timer: self.turn_timer.cancel()
         winner_stats = self.get_player_stats(winner_user)
+        
         all_data = load_data()
         winner_id = str(winner_user.id)
         if winner_id in all_data:
-            # school_points 키가 없으면 0으로 시작, 있으면 10 추가
             all_data[winner_id]['school_points'] = all_data[winner_id].get('school_points', 0) + 10
             save_data(all_data)
-            self.add_log(f"🏆 {winner_stats['name']}님이 승리하여 스쿨 포인트 10점을 획득했습니다!")
-        embed = discord.Embed(title="🎉 전투 종료! 🎉", description=f"**승자: {winner_stats['name']}**\n> {reason}", color=winner_stats['color'])
+        
+        embed = discord.Embed(title="🎉 전투 종료! 🎉", description=f"**승자: {winner_stats['name']}**\n> {reason}\n\n**획득: 10 스쿨 포인트**", color=winner_stats['color'])
         await self.channel.send(embed=embed)
-        if self.channel.id in self.active_battles: 
-            del self.active_battles[self.channel.id]
         
     def get_coords(self, pos): return pos // 5, pos % 5
     def get_distance(self, pos1, pos2): r1, c1 = self.get_coords(pos1); r2, c2 = self.get_coords(pos2); return max(abs(r1 - r2), abs(c1 - c2))
@@ -222,7 +219,9 @@ class TeamBattle(Battle): # Battle 클래스의 기능을 상속받음
         return False
     
     async def end_battle(self, winner_team_name, winner_ids, reason):
-        if self.turn_timer: self.turn_timer.cancel()
+        if self.turn_timer: 
+            self.turn_timer.cancel()
+
         all_data = load_data()
         point_log = []
         for winner_id in winner_ids:
@@ -232,11 +231,14 @@ class TeamBattle(Battle): # Battle 클래스의 기능을 상속받음
                 winner_name = self.players[winner_id]['name']
                 point_log.append(f"{winner_name}: +15P")
         save_data(all_data)
+
         winner_representative_stats = self.players[winner_ids[0]]
-        embed = discord.Embed(title=f"🎉 {winner_team_name} 승리! 🎉", description=f"> {reason}", color=winner_representative_stats['color'])
+        embed = discord.Embed(
+            title=f"🎉 {winner_team_name} 승리! 🎉",
+            description=f"> {reason}\n\n**획득: 15 스쿨 포인트**\n" + "\n".join(point_log),
+            color=winner_representative_stats['color']
+        )
         await self.channel.send(embed=embed)
-        if self.channel.id in self.active_battles: 
-            del self.active_battles[self.channel.id]
     
     async def timeout_task(self):
         try:
@@ -284,12 +286,12 @@ class BattleCog(commands.Cog):
         try:
             reaction, user = await self.bot.wait_for('reaction_add', timeout=15.0, check=check)
             if str(reaction.emoji) == "✅":
-                await ctx.send("대결이 성사되었습니다! 전투를 시작합니다.")
-                # 클래스에 active_battles 참조를 전달
-                battle = Battle(ctx.channel, ctx.author, opponent, self.active_battles)
-                self.active_battles[ctx.channel.id] = battle
-                await battle.start_turn_timer()
-                await battle.display_board()
+                if str(reaction.emoji) == "✅":
+                    await ctx.send("대결이 성사되었습니다! 전투를 시작합니다.")
+                    battle = Battle(ctx.channel, ctx.author, opponent)
+                    self.active_battles[ctx.channel.id] = battle
+                    await battle.start_turn_timer()
+                    await battle.display_board()
             else:
                 await ctx.send("대결이 거절되었습니다.")
         except asyncio.TimeoutError:
@@ -343,7 +345,7 @@ class BattleCog(commands.Cog):
     
     @commands.command(name="공격")
     async def attack(self, ctx, target_user: discord.Member = None):
-        battle, current_player_id = await self.get_current_player_and_battle(ctx)
+        battle = self.active_battles.get(ctx.channel.id)
         if not battle: return
         
         # 1:1 대결과 팀 대결의 현재 턴 플레이어 확인 방식이 다름
@@ -438,15 +440,36 @@ class BattleCog(commands.Cog):
         target['current_hp'] = max(0, target['current_hp'] - final_damage)
         battle.add_log(f"💥 {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해를 입혔습니다!")
 
-        # 게임 종료 확인
-        if target['current_hp'] == 0:
+        # 공격 후 체력이 0이 되어 전투가 끝났을 때
+        # 공격 후 체력이 0이 되어 전투가 끝났을 때
+        if target['current_hp'] <= 0:
+            # 팀 대결일 경우, 팀 전체가 전멸했는지 확인
             if isinstance(battle, TeamBattle):
+                # check_game_over가 end_battle을 호출하고 전투 목록에서 제거
                 await battle.check_game_over()
-            else:
+            
+            # 1:1 대결일 경우
+            elif isinstance(battle, Battle):
+                # 승리 처리 후 전투 목록에서 제거
                 await battle.end_battle(ctx.author, f"{target['name']}의 체력이 0이 되어 전투에서 승리했습니다!")
-        else:
-            await battle.handle_action_cost(1)
+                if ctx.channel.id in self.active_battles:
+                    del self.active_battles[ctx.channel.id]
+            
+            # PvE 사냥일 경우
+            elif isinstance(battle, PveBattle):
+                # 승리 처리 (end_battle 내부에서 목록 제거)
+                await battle.end_battle(win=True)
 
+        # 전투가 계속될 경우
+        else:
+            if isinstance(battle, PveBattle):
+                # 몬스터 턴 진행
+                await battle.monster_turn()
+            else:
+                # PvP 턴 넘기기
+                await battle.handle_action_cost(1)
+
+            
     @commands.command(name="이동")
     async def move(self, ctx, *directions):
         battle, current_player_id = await self.get_current_player_and_battle(ctx)
@@ -743,6 +766,9 @@ class BattleCog(commands.Cog):
                 await battle.end_battle("A팀", battle.team_a_ids, f"B팀의 {ctx.author.display_name}님이 기권했습니다.")
             else:
                 await ctx.send("당신은 이 전투의 참여자가 아닙니다.")
+
+        if ctx.channel.id in self.active_battles:
+            del self.active_battles[ctx.channel.id]
 
 
 # 봇에 Cog를 추가하기 위한 필수 함수
