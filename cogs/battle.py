@@ -190,6 +190,79 @@ class BattleCog(commands.Cog):
         """BattleCog가 살아있는지 확인하는 테스트 명령어"""
         await ctx.send("✅ Battle Cog에서 응답!")
 
+
+    @commands.command(name="대결")
+    async def battle_request(self, ctx, opponent: discord.Member):
+        if ctx.channel.id in self.active_battles: 
+            return await ctx.send("이 채널에서는 이미 다른 활동이 진행중입니다.")
+        if ctx.author == opponent: 
+            return await ctx.send("자기 자신과는 대결할 수 없습니다.")
+        
+        all_data = load_data()
+        p1_id, p2_id = str(ctx.author.id), str(opponent.id)
+        if not all_data.get(p1_id, {}).get("registered", False) or not all_data.get(p2_id, {}).get("registered", False):
+            return await ctx.send("두 플레이어 모두 `!등록`을 완료해야 합니다.")
+
+        msg = await ctx.send(f"{opponent.mention}, {ctx.author.display_name}님의 대결 신청을 수락하시겠습니까? (30초 내 반응)")
+        await msg.add_reaction("✅")
+        await msg.add_reaction("❌")
+
+        def check(reaction, user):
+            return user == opponent and str(reaction.emoji) in ["✅", "❌"] and reaction.message.id == msg.id
+
+        try:
+            reaction, user = await self.bot.wait_for('reaction_add', timeout=30.0, check=check)
+            if str(reaction.emoji) == "✅":
+                await ctx.send("대결이 성사되었습니다! 전투를 시작합니다.")
+                battle = Battle(ctx.channel, ctx.author, opponent, self.active_battles)
+                self.active_battles[ctx.channel.id] = battle
+                await battle.start_turn_timer()
+                await battle.display_board()
+            else:
+                await ctx.send("대결이 거절되었습니다.")
+        except asyncio.TimeoutError:
+            await ctx.send("시간이 초과되어 대결이 취소되었습니다.")
+
+    @commands.command(name="팀대결")
+    async def team_battle_request(self, ctx, teammate: discord.Member, opponent1: discord.Member, opponent2: discord.Member):
+        if ctx.channel.id in self.active_battles: 
+            return await ctx.send("이 채널에서는 이미 전투가 진행중입니다.")
+        
+        players = {ctx.author, teammate, opponent1, opponent2}
+        if len(players) < 4: 
+            return await ctx.send("모든 플레이어는 서로 다른 유저여야 합니다.")
+        
+        all_data = load_data()
+        for p in players:
+            if not all_data.get(str(p.id), {}).get("registered", False): 
+                return await ctx.send(f"{p.display_name}님은 아직 등록하지 않은 플레이어입니다.")
+
+        msg = await ctx.send(f"**⚔️ 팀 대결 신청! ⚔️**\n\n**A팀**: {ctx.author.mention}, {teammate.mention}\n**B팀**: {opponent1.mention}, {opponent2.mention}\n\nB팀의 {opponent1.mention}, {opponent2.mention} 님! 대결을 수락하시면 30초 안에 ✅ 반응을 눌러주세요. (두 명 모두 수락해야 시작됩니다)")
+        await msg.add_reaction("✅")
+        
+        accepted_opponents = set()
+        def check(reaction, user): 
+            return str(reaction.emoji) == '✅' and user.id in [opponent1.id, opponent2.id] and reaction.message.id == msg.id
+        
+        try:
+            while len(accepted_opponents) < 2:
+                reaction, user = await self.bot.wait_for('reaction_add', timeout=30.0, check=check)
+                if user.id not in accepted_opponents:
+                    accepted_opponents.add(user.id)
+                    await ctx.send(f"✅ {user.display_name}님이 대결을 수락했습니다. (남은 인원: {2-len(accepted_opponents)}명)")
+            
+            await ctx.send("양 팀 모두 대결을 수락했습니다! 전투를 시작합니다.")
+            team_a = [ctx.author, teammate]
+            team_b = [opponent1, opponent2]
+            battle = TeamBattle(ctx.channel, team_a, team_b, self.active_battles)
+            self.active_battles[ctx.channel.id] = battle
+            await battle.next_turn()
+            
+        except asyncio.TimeoutError: 
+            return await ctx.send("시간이 초과되어 대결이 취소되었습니다.")
+
+    
+
 async def setup(bot):
     await bot.add_cog(BattleCog(bot))
 
