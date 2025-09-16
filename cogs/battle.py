@@ -422,12 +422,17 @@ class BattleCog(commands.Cog):
         if battle.battle_type == "pve":
             can_attack = True
             attack_type = "근거리" if attacker['class'] == '검사' else ("근거리" if attacker.get('physical', 0) >= attacker.get('mental', 0) else "원거리")
+# cogs/battle.py 의 attack 함수 내부
+
         else: # PvP
             distance = battle.get_distance(attacker['pos'], target['pos'])
-            if attacker['class'] == '마법사' and 3 <= distance <= 5: can_attack, attack_type = True, "원거리"
-            elif attacker['class'] == '마검사' and (distance == 1 or 2 <= distance <= 3):
-                attack_type = "근거리" if distance == 1 else "원거리"; can_attack = True
-            elif attacker['class'] == '검사' and distance == 1: can_attack, attack_type = True, "근거리"
+            if attacker['class'] == '마법사' and 2 <= distance <= 3: # ◀◀ 이 부분을 수정
+                can_attack, attack_type = True, "원거리"
+            elif attacker['class'] == '마검사':
+                if distance == 1: can_attack, attack_type = True, "근거리"
+                elif 2 <= distance <= 3: can_attack, attack_type = True, "원거리"
+            elif attacker['class'] == '검사' and distance == 1: 
+                can_attack, attack_type = True, "근거리"
         
         if not can_attack: return await ctx.send("❌ 공격 사거리가 아닙니다.", delete_after=10)
         
