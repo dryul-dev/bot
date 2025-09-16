@@ -42,6 +42,7 @@ async def daily_reset_task():
 async def on_ready():
     print(f'{bot.user.name} 봇이 성공적으로 로그인했습니다!')
     print('------')
+    daily_reset_task.start()
 
 
 

@@ -340,7 +340,6 @@ class GrowthCog(commands.Cog):
         
         embed = discord.Embed(title="💪 '육체' 도전 등록 완료!", description=f"**{ctx.author.display_name}**님, 오늘의 '육체' 도전이 정상적으로 등록되었습니다.", color=discord.Color.gold())
         embed.add_field(name="진행 안내", value="오후 4시 이후 `!도전완료` 명령어를 통해\n결과를 보고하고 스탯을 획득하세요!", inline=False)
-        embed.set_footer(text="강인한 육체에 강인한 정신이 깃듭니다.")
         await ctx.send(embed=embed)
 
 
