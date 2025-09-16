@@ -95,11 +95,21 @@ class Battle:
         self.turn_timer = asyncio.create_task(self.timeout_task())
     async def timeout_task(self):
         try:
-            await asyncio.sleep(300)
-            winner = self.get_opponent_stats(self.current_turn_player); loser = self.get_player_stats(self.current_turn_player)
-            await self.end_battle(winner, f"시간 초과로 {loser['name']}님이 패배했습니다.")
-            if self.channel.id in self.active_battles: del self.active_battles[self.channel.id]
-        except asyncio.CancelledError: pass
+            await asyncio.sleep(300) # 5분
+            
+            # ▼▼▼ 여기가 수정된 부분입니다 ▼▼▼
+            # 현재 턴 플레이어(패배자)로부터 상대방(승리자)의 '객체'를 찾습니다.
+            loser_user = self.current_turn_player
+            winner_user = self.p2_user if loser_user.id == self.p1_user.id else self.p1_user
+            
+            await self.end_battle(winner_user, f"시간 초과로 {loser_user.display_name}님이 패배했습니다.")
+            # ▲▲▲ 여기가 수정된 부분입니다 ▲▲▲
+            
+            # 전투가 종료되었으므로 active_battles에서 직접 제거
+            if self.channel.id in self.active_battles: 
+                del self.active_battles[self.channel.id]
+        except asyncio.CancelledError: 
+            pass
 
     async def end_battle(self, winner_user, reason):
         if self.turn_timer: self.turn_timer.cancel()
@@ -132,14 +142,41 @@ class TeamBattle(Battle):
         self.turn_index = (self.turn_index + 1) % 4
         next_player_id = self.turn_order[self.turn_index]
         if self.players[next_player_id]['current_hp'] <= 0:
-            self.add_log(f"↪️ {self.players[next_player_id]['name']}님은 리타이어하여 턴을 건너뜁니다."); await self.display_board(); await asyncio.sleep(1.5); await self.next_turn(); return
+            self.add_log(f"↪️ {self.players[next_player_id]['name']}님은 리타이어하여 턴을 건너뜁니다."); 
+            await self.display_board(); 
+            await asyncio.sleep(1.5); 
+            await self.next_turn(); return
         self.current_turn_player_id = next_player_id; self.turn_actions_left = 2
         current_player_stats = self.players[self.current_turn_player_id]; effects = current_player_stats.get('effects', {})
         if 'action_point_modifier' in effects:
-            self.turn_actions_left += effects['action_point_modifier']; self.add_log(f"⏱️ 효과로 인해 {current_player_stats['name']}의 행동 횟수가 조정됩니다!")
+            self.turn_actions_left += effects['action_point_modifier']; 
+            self.add_log(f"⏱️ 효과로 인해 {current_player_stats['name']}의 행동 횟수가 조정됩니다!")
         current_player_stats['effects'] = {}
         if current_player_stats.get('special_cooldown', 0) > 0: current_player_stats['special_cooldown'] -= 1
-        self.add_log(f"▶️ {current_player_stats['name']}의 턴입니다."); await self.start_turn_timer(); await self.display_board()
+        self.add_log(f"▶️ {current_player_stats['name']}의 턴입니다."); 
+        await self.start_turn_timer(); 
+    async def timeout_task(self):
+        """5분이 지나면 타임아웃으로 패배 처리하는 함수"""
+        try:
+            await asyncio.sleep(300) # 5분
+            
+            # 현재 턴 플레이어(패배자)의 팀을 찾습니다.
+            loser_player_id = self.current_turn_player_id
+            if loser_player_id in self.team_a_ids:
+                winner_team_name, winner_ids = "B팀", self.team_b_ids
+            else:
+                winner_team_name, winner_ids = "A팀", self.team_a_ids
+            
+            loser_name = self.players[loser_player_id]['name']
+            await self.end_battle(winner_team_name, winner_ids, f"시간 초과로 {loser_name}님의 턴이 종료되어 상대팀이 승리했습니다.")
+
+            # 전투가 종료되었으므로 active_battles에서 직접 제거
+            if self.channel.id in self.active_battles: 
+                del self.active_battles[self.channel.id]
+
+        except asyncio.CancelledError:
+            pass # 타이머가 정상적으로 취소된 경우
+            await self.display_board()
 
     async def display_board(self, extra_message=""):
         turn_player_stats = self.players[self.current_turn_player_id]
@@ -319,12 +356,12 @@ class BattleCog(commands.Cog):
         battle.add_log(f"🚶 {p_stats['name']}이(가) 이동했습니다.")
         await battle.handle_action_cost(1)
 
-
+    '''
     @commands.command(name="공격")
     async def attack(self, ctx, target_user: discord.Member = None):
         battle, current_player_id = await self.get_current_player_and_battle(ctx)
         if not battle: return
-    '''
+
         # --- 공격자 및 타겟 정보 설정 ---
         attacker = battle.player_stats
         target = battle.monster_stats
