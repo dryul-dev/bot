@@ -42,6 +42,54 @@ class RoleplayCog(commands.Cog):
         }
         save_profiles(profiles)
         await ctx.send(f"✅ 프로필 '{name}'이(가) 성공적으로 생성되었습니다.")
+
+
+    # cogs/roleplay.py 의 RoleplayCog 클래스 내부에 추가
+
+    @commands.command(name="프로필수정")
+    @commands.is_owner()
+    async def edit_profile(self, ctx, name: str, item_to_edit: str, *, new_value: str):
+        """기존 프로필의 정보를 수정합니다. !프로필수정 <이름> <항목> <새 값>"""
+        
+        profiles = load_profiles()
+        if name not in profiles:
+            return await ctx.send(f"'{name}' 이름의 프로필을 찾을 수 없습니다.")
+
+        item_to_edit = item_to_edit.lower()
+        profile_data = profiles[name]
+
+        if item_to_edit == "이름":
+            if new_value in profiles:
+                return await ctx.send(f"'{new_value}' 이름은 이미 다른 프로필이 사용하고 있습니다.")
+            # 이름 변경 시, 기존 데이터를 새 이름으로 옮기고 이전 것은 삭제
+            profiles[new_value] = profile_data
+            del profiles[name]
+            await ctx.send(f"✅ 프로필 이름이 '{name}'에서 '{new_value}'(으)로 변경되었습니다.")
+
+        elif item_to_edit == "이미지":
+            profile_data["avatar_url"] = new_value
+            await ctx.send(f"✅ '{name}' 프로필의 이미지가 변경되었습니다.")
+
+        elif item_to_edit == "웹훅":
+            new_value = new_value.strip('<>')
+            if not (new_value.startswith("https://discord.com/api/webhooks/") or 
+                    new_value.startswith("https://discordapp.com/api/webhooks/")):
+                return await ctx.send("올바른 디스코드 웹훅 URL을 입력해주세요.")
+            
+            profile_data["webhook_url"] = new_value
+            await ctx.send(f"✅ '{name}' 프로필의 웹훅 URL이 변경되었습니다.")
+
+        else:
+            return await ctx.send("수정할 수 있는 항목은 `이름`, `이미지`, `웹훅` 입니다.")
+
+        save_profiles(profiles)
+
+    @edit_profile.error
+    async def edit_profile_error(self, ctx, error):
+        if isinstance(error, commands.MissingRequiredArgument):
+            await ctx.send("사용법: `!프로필수정 <기존이름> <수정항목> <새로운 값>`\n> 수정항목: `이름`, `이미지`, `웹훅`")
+        elif isinstance(error, commands.NotOwner):
+            await ctx.send("이 명령어는 봇 소유자만 사용할 수 있습니다.")
         
     @commands.command(name="프로필삭제")
     @commands.is_owner()
