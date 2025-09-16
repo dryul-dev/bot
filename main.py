@@ -34,8 +34,9 @@ async def daily_reset_task():
     if now.hour == 0 and now.minute == 0:
         all_data = load_data()
         for player_id in all_data:
-            all_data[player_id]["challenge_type"] = None
-            all_data[player_id]["challenge_registered_today"] = False
+            player_data = all_data[player_id]
+            player_data["challenge_type"] = None
+            player_data["challenge_registered_today"] = False
         save_data(all_data)
         print(f"[{now.strftime('%Y-%m-%d %H:%M:%S')}] 일일 도전 상태 초기화 완료.")
 
