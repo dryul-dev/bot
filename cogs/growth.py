@@ -471,7 +471,7 @@ class GrowthCog(commands.Cog):
         embed.set_footer(text=f"삼여신의 축복을 당신에게.")
         await ctx.send(embed=embed)
 
-    '''
+    
 
     @commands.command(name="수동초기화")
     @commands.is_owner() # 봇 소유자만 실행 가능하도록 제한
@@ -536,7 +536,7 @@ class GrowthCog(commands.Cog):
             print(f"!데이터조회 명령어 오류 발생: {error}") # 터미널에 상세 오류 출력
             await ctx.send("명령어 처리 중 알 수 없는 오류가 발생했습니다.")
 
-    '''
+    
     
 
 # 봇에 Cog를 추가하기 위한 필수 함수
