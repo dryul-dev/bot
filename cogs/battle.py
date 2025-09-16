@@ -46,10 +46,16 @@ class Battle:
             all_data[player_id]["rest_buff_active"] = False; save_data(all_data)
         return {"id": user.id, "name": base_stats['name'], "emoji": base_stats['emoji'], "class": base_stats['class'], "attribute": base_stats.get("attribute"), "advanced_class": base_stats.get("advanced_class"), "defense": 0, "effects": {}, "color": int(base_stats['color'][1:], 16), "mental": base_stats['mental'], "physical": base_stats['physical'], "level": level, "max_hp": max_hp, "current_hp": max_hp, "pos": -1, "special_cooldown": 0, "double_damage_buff": 0}
 
-    def get_player_stats(self, user): return self.p1_stats if user.id == self.p1_user.id else self.p2_stats
-    def get_opponent_stats(self, user): return self.p2_stats if user.id == self.p1_user.id else self.p1_stats
-    def add_log(self, message): self.battle_log.append(message);
-        if len(self.battle_log) > 5: self.battle_log.pop(0)
+    def get_player_stats(self, user):
+        return self.p1_stats if user.id == self.p1_user.id else self.p2_stats
+
+    def get_opponent_stats(self, user):
+        return self.p2_stats if user.id == self.p1_user.id else self.p1_stats
+
+    def add_log(self, message):
+        self.battle_log.append(message)
+        if len(self.battle_log) > 5:
+            self.battle_log.pop(0)
 
     async def display_board(self, extra_message=""):
         turn_player_stats = self.get_player_stats(self.current_turn_player)
@@ -172,8 +178,10 @@ class BattleCog(commands.Cog):
         self.active_battles = bot.active_battles
 
     async def get_current_player_and_battle(self, ctx):
+        """모든 전투 명령어에서 공통으로 사용할 플레이어 및 전투 정보 확인 함수"""
         battle = self.active_battles.get(ctx.channel.id)
         if not battle: return None, None
+        
         current_player_id = None
         if hasattr(battle, 'battle_type'):
             if battle.battle_type == "pve":
@@ -181,8 +189,10 @@ class BattleCog(commands.Cog):
                 current_player_id = battle.player_stats['id']
             elif battle.battle_type in ["pvp_1v1", "pvp_team"]:
                 current_player_id = battle.current_turn_player.id if battle.battle_type == "pvp_1v1" else battle.current_turn_player_id
+        
         if not current_player_id or ctx.author.id != current_player_id: return None, None
         return battle, current_player_id
+
 
     @commands.command(name="대결")
     async def battle_request(self, ctx, opponent: discord.Member):
