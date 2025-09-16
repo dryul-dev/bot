@@ -51,7 +51,7 @@ class PveBattle:
         monster_template = MONSTER_DATA[monster_name]
         
         avg_player_damage = (self.player_stats['physical'] + self.player_stats['mental']) / 2 + self.player_stats['level']
-        monster_hp = round(max(15, avg_player_damage * random.uniform(3.5, 5.0)))
+        monster_hp = round(max(15, avg_player_damage * random.uniform(3.5, 4.0)))
         monster_ap = round(max(3, self.player_stats['hp'] / random.uniform(4.5, 6.0)))
 
         self.monster_stats = {
