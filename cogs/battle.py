@@ -352,6 +352,8 @@ class BattleCog(commands.Cog):
             print(f"[DEBUG/battle.py] 오류: 채널({ctx.channel.id})에서 전투 정보를 찾지 못했습니다. 함수를 종료합니다.")
             # ▲▲▲ 디버깅용 print 추가 ▲▲▲
             return
+        
+        print("[DEBUG] 1. 전투 객체 확인 완료.")
 
         # --- 1. 턴 확인 및 공격자 정보 가져오기 ---
         attacker = None
@@ -381,9 +383,26 @@ class BattleCog(commands.Cog):
             if not is_opponent: return await ctx.send("❌ 같은 팀원은 공격할 수 없습니다.", delete_after=10)
             target = battle.players[target_user.id]
 
-        if not target: return await ctx.send("공격 대상을 찾을 수 없습니다.", delete_after=10)
-
+        if not attacker or not target:
+            print(f"[DEBUG] 오류: 공격자 또는 타겟 정보를 설정하지 못했습니다. Attacker: {attacker}, Target: {target}")
+            return
             
+        print(f"[DEBUG] 2. 공격자({attacker['name']}) 및 타겟({target['name']}) 정보 확인 완료.")
+
+
+# --- 공격 가능 여부 확인 ---
+        can_attack, attack_type = False, ""
+        if isinstance(battle, PveBattle):
+            can_attack, attack_type = True, "근거리" # PvE는 임시로 근거리 고정
+        else: # PvP
+            distance = battle.get_distance(attacker['pos'], target['pos'])
+            # ... (기존 PvP 사거리 계산 로직) ...
+        
+        if not can_attack:
+            print(f"[DEBUG] 오류: 공격 사거리가 아닙니다.")
+            return
+        print(f"[DEBUG] 3. 공격 가능 여부 확인 완료. (타입: {attack_type})")
+
         # 데미지 계산
         base_damage = attacker['physical'] + random.randint(0, attacker['mental']) if attack_type == "근거리" else attacker['mental'] + random.randint(0, attacker['physical'])
         
@@ -428,6 +447,8 @@ class BattleCog(commands.Cog):
 
         target['current_hp'] = max(0, target['current_hp'] - final_damage)
         battle.add_log(f"💥 {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해를 입혔습니다!")
+        print(f"[DEBUG] 5. 데미지 적용 및 로그 추가 완료.")
+
 
         if target['current_hp'] <= 0:
             if isinstance(battle, PveBattle): await battle.end_battle(win=True)
@@ -442,6 +463,8 @@ class BattleCog(commands.Cog):
             if isinstance(battle, PveBattle): await battle.monster_turn()
             else: await battle.handle_action_cost(1)
             
+        print("[DEBUG] 6. 공격 명령어 실행 완료.")
+
    # cogs/battle.py 의 BattleCog 클래스 내부
 
     @commands.command(name="이동")
