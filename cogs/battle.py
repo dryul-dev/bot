@@ -20,10 +20,11 @@ def save_data(data):
 
 # --- 1:1 전투 관리 클래스 ---
 class Battle:
-    def __init__(self, channel, player1, player2):
+    def __init__(self, channel, player1, player2, active_battles_ref):
         self.channel = channel
         self.p1_user = player1
         self.p2_user = player2
+        self.active_battles = active_battles_ref
         self.grid = ["□"] * 15
         self.turn_timer = None
         self.battle_log = ["전투가 시작되었습니다!"]
@@ -37,6 +38,7 @@ class Battle:
         self.grid[self.p2_stats['pos']] = self.p2_stats['emoji']
         self.current_turn_player = random.choice([self.p1_user, self.p2_user])
         self.turn_actions_left = 2
+        
 
     def _setup_player_stats(self, all_data, user):
         player_id = str(user.id)
@@ -137,13 +139,14 @@ class Battle:
 
 # --- 팀 전투 관리 클래스 ---
 class TeamBattle(Battle): # Battle 클래스의 기능을 상속받음
-    def __init__(self, channel, team_a_users, team_b_users, bot):
+    def __init__(self, channel, team_a_users, team_b_users, bot, active_battles_ref):
         self.channel = channel
         self.bot = bot
         self.players = {}
         self.battle_log = ["팀 전투가 시작되었습니다!"]
         self.team_a_ids = [p.id for p in team_a_users]
         self.team_b_ids = [p.id for p in team_b_users]
+        self.active_battles = active_battles_ref
         
         all_data = load_data()
         for player_user in team_a_users + team_b_users:
@@ -341,67 +344,63 @@ class BattleCog(commands.Cog):
     
     @commands.command(name="공격")
     async def attack(self, ctx, target_user: discord.Member = None):
-        # ▼▼▼ 디버깅용 print 추가 ▼▼▼
-        print(f"\n[DEBUG/battle.py] !공격 명령어 수신.")
-        print(f"[DEBUG/battle.py] BattleCog가 바라보는 active_battles: {self.active_battles}")
-        # ▲▲▲ 디버깅용 print 추가 ▲▲▲
-
         battle = self.active_battles.get(ctx.channel.id)
-        if not battle:
-            # ▼▼▼ 디버깅용 print 추가 ▼▼▼
-            print(f"[DEBUG/battle.py] 오류: 채널({ctx.channel.id})에서 전투 정보를 찾지 못했습니다. 함수를 종료합니다.")
-            # ▲▲▲ 디버깅용 print 추가 ▲▲▲
-            return
-        
-        print("[DEBUG] 1. 전투 객체 확인 완료.")
+        if not battle: return
 
-        # --- 1. 턴 확인 및 공격자 정보 가져오기 ---
+        # --- 1. 전투 타입에 따라 공격자와 타겟을 명확히 설정 ---
         attacker = None
-        if isinstance(battle, PveBattle):
-            if battle.current_turn != "player": return await ctx.send("플레이어의 턴이 아닙니다.", delete_after=5)
-            attacker = battle.player_stats
-        elif isinstance(battle, (Battle, TeamBattle)):
-            current_player_id = battle.current_turn_player.id if isinstance(battle, Battle) else battle.current_turn_player_id
-            if ctx.author.id != current_player_id: return await ctx.send("자신의 턴이 아닙니다.", delete_after=5)
-            if battle.turn_actions_left <= 0: return await ctx.send("행동력이 없습니다.", delete_after=10)
-            attacker = battle.players[ctx.author.id] if isinstance(battle, TeamBattle) else battle.get_player_stats(ctx.author)
-
-        # --- 2. 타겟 정보 가져오기 및 유효성 검사 ---
         target = None
+        
+        # [ PvE 전투일 경우 ]
         if isinstance(battle, PveBattle):
+            if battle.current_turn != "player" or ctx.author.id != battle.player_stats['id']:
+                return # 턴이 아니면 조용히 종료
+            attacker = battle.player_stats
             target = battle.monster_stats
-        elif isinstance(battle, Battle): # 1:1 대결
-            # 멘션이 없으면 자동으로 상대를 타겟으로 지정
-            opponent_user = battle.p2_user if ctx.author.id == battle.p1_user.id else battle.p1_user
-            target = battle.get_player_stats(target_user or opponent_user)
-        elif isinstance(battle, TeamBattle): # 팀 대결
-            if not target_user: return await ctx.send("팀 대결에서는 공격할 대상을 `@멘션`으로 지정해주세요.")
-            if target_user.id not in battle.players: return await ctx.send("유효하지 않은 대상입니다.", delete_after=10)
-            # 상대팀인지 확인
-            is_opponent = (ctx.author.id in battle.team_a_ids and target_user.id in battle.team_b_ids) or \
-                          (ctx.author.id in battle.team_b_ids and target_user.id in battle.team_a_ids)
-            if not is_opponent: return await ctx.send("❌ 같은 팀원은 공격할 수 없습니다.", delete_after=10)
-            target = battle.players[target_user.id]
 
-        if not attacker or not target:
-            print(f"[DEBUG] 오류: 공격자 또는 타겟 정보를 설정하지 못했습니다. Attacker: {attacker}, Target: {target}")
-            return
+        # [ PvP 전투일 경우 ]
+        elif isinstance(battle, (Battle, TeamBattle)):
+            # 공통 턴 확인
+            current_player_id = battle.current_turn_player.id if isinstance(battle, Battle) else battle.current_turn_player_id
+            if ctx.author.id != current_player_id: return
+            if battle.turn_actions_left <= 0: return await ctx.send("행동력이 없습니다.", delete_after=10)
             
-        print(f"[DEBUG] 2. 공격자({attacker['name']}) 및 타겟({target['name']}) 정보 확인 완료.")
+            # 1:1 대결 타겟 설정
+            if isinstance(battle, Battle):
+                opponent_user = battle.p2_user if ctx.author.id == battle.p1_user.id else battle.p1_user
+                target_user = target_user or opponent_user # 멘션 없으면 상대를 자동 타겟
+                attacker = battle.get_player_stats(ctx.author)
+                target = battle.get_player_stats(target_user)
 
+            # 팀 대결 타겟 설정
+            elif isinstance(battle, TeamBattle):
+                if not target_user: return await ctx.send("팀 대결에서는 공격 대상을 `@멘션`으로 지정해주세요.")
+                if target_user.id not in battle.players: return await ctx.send("유효하지 않은 대상입니다.", delete_after=10)
+                
+                is_opponent = (ctx.author.id in battle.team_a_ids and target_user.id in battle.team_b_ids) or \
+                              (ctx.author.id in battle.team_b_ids and target_user.id in battle.team_a_ids)
+                if not is_opponent: return await ctx.send("❌ 같은 팀원은 공격할 수 없습니다.", delete_after=10)
+                
+                attacker = battle.players[ctx.author.id]
+                target = battle.players[target_user.id]
+        
+        # 공격자 또는 타겟 설정에 실패했다면 함수 종료
+        if not attacker or not target:
+            return
 
-# --- 공격 가능 여부 확인 ---
+        # --- 2. 공격 가능 여부 확인 (사거리 등) ---
         can_attack, attack_type = False, ""
         if isinstance(battle, PveBattle):
-            can_attack, attack_type = True, "근거리" # PvE는 임시로 근거리 고정
+            attack_type = "근거리" if attacker['class'] == '검사' else ("근거리" if attacker.get('physical', 0) >= attacker.get('mental', 0) else "원거리")
+            can_attack = True
         else: # PvP
             distance = battle.get_distance(attacker['pos'], target['pos'])
-            # ... (기존 PvP 사거리 계산 로직) ...
+            if attacker['class'] == '마법사' and 3 <= distance <= 5: can_attack, attack_type = True, "원거리"
+            elif attacker['class'] == '마검사' and (distance == 1 or 2 <= distance <= 3):
+                attack_type = "근거리" if distance == 1 else "원거리"; can_attack = True
+            elif attacker['class'] == '검사' and distance == 1: can_attack, attack_type = True, "근거리"
         
-        if not can_attack:
-            print(f"[DEBUG] 오류: 공격 사거리가 아닙니다.")
-            return
-        print(f"[DEBUG] 3. 공격 가능 여부 확인 완료. (타입: {attack_type})")
+        if not can_attack: return await ctx.send("❌ 공격 사거리가 아닙니다.", delete_after=10)
 
         # 데미지 계산
         base_damage = attacker['physical'] + random.randint(0, attacker['mental']) if attack_type == "근거리" else attacker['mental'] + random.randint(0, attacker['physical'])
