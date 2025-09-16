@@ -33,9 +33,9 @@ class RoleplayCog(commands.Cog):
             return await ctx.send(f"이미 '{name}' 이름의 프로필이 존재합니다.")
         
         # 웹훅 URL 유효성 간단 검사
-        if not webhook_url.startswith("https://discordapp.com/api/webhooks/"):
+        if not (webhook_url.startswith("https://discord.com/api/webhooks/") or 
+                webhook_url.startswith("https://discordapp.com/api/webhooks/")):
             return await ctx.send("올바른 디스코드 웹훅 URL을 입력해주세요.")
-
         profiles[name] = {
             "avatar_url": avatar_url,
             "webhook_url": webhook_url
