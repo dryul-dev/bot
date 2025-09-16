@@ -82,8 +82,13 @@ class PveBattle:
             if player_data:
                 # 데이터 업데이트
                 player_data['gold'] = player_data.get('gold', 0) + gold_won
-                pve_inventory = player_data.get('pve_inventory', [])
-                pve_inventory.extend(materials_won)
+                pve_inventory = player_data.get('pve_inventory', {})
+                for material in materials_won:
+                    # 보관함에 자리가 있을 때만 재료 추가
+                    if len(pve_inventory) < 10 or material in pve_inventory:
+                        current_amount = pve_inventory.get(material, 0)
+                        pve_inventory[material] = min(20, current_amount + 1) # 최대 20개 제한
+                
                 player_data['pve_inventory'] = pve_inventory
                 save_data(all_data)
 
@@ -144,6 +149,45 @@ class MonsterCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.active_battles = bot.active_battles
+
+# cogs/monster.py 의 MonsterCog 클래스 내부에 추가
+
+    @commands.command(name="루트")
+    async def loot(self, ctx):
+        """자신이 보유한 골드와 PvE 재료를 확인합니다."""
+        all_data = load_data()
+        player_id = str(ctx.author.id)
+        player_data = all_data.get(player_id)
+
+        if not player_data or not player_data.get("registered"):
+            return await ctx.send("먼저 `!등록`을 진행해주세요.")
+
+        gold = player_data.get("gold", 0)
+        pve_inventory = player_data.get("pve_inventory", {})
+
+        # Embed 생성
+        embed = discord.Embed(
+            title=f"💰 {ctx.author.display_name}의 전리품",
+            color=int(player_data.get('color', '#FFFFFF')[1:], 16)
+        )
+        embed.add_field(name="보유 골드", value=f"`{gold}` G", inline=False)
+        
+        # 재료 목록 생성
+        if not pve_inventory:
+            loot_list = "아직 재료가 없습니다."
+        else:
+            # pve_inventory를 딕셔너리로 가정하고 처리
+            loot_list = "\n".join(f"- {name}: `{count}`/20개" for name, count in pve_inventory.items())
+        
+        embed.add_field(
+            name=f"보유 재료 ({len(pve_inventory)}/10 종류)",
+            value=loot_list,
+            inline=False
+        )
+        embed.set_footer(text="재료 보관함이 가득 차면, 시장에서 판매해야 합니다.")
+        await ctx.send(embed=embed)
+
+
     @commands.command(name="사냥")
     async def hunt(self, ctx):
         if ctx.channel.id in self.active_battles: return await ctx.send("이 채널에서는 이미 다른 활동이 진행중입니다.")
@@ -167,6 +211,40 @@ class MonsterCog(commands.Cog):
             await ctx.send("도망에 실패했다! 몬스터가 공격해온다!")
             await asyncio.sleep(1)
             await battle.monster_turn()
+
+
+# cogs/growth.py의 fix_data_structure 함수 내부
+
+    @commands.command(name="데이터점검")
+    @commands.is_owner()
+    async def fix_data_structure(self, ctx):
+        await ctx.send("모든 유저 데이터 구조 점검 및 업데이트를 시작합니다...")
+        
+        all_data = load_data()
+        updated_users = 0
+        
+        for player_id, player_data in all_data.items():
+            updated = False
+            
+            # ... (기존 필드 추가 로직) ...
+
+            # ▼▼▼ 여기가 추가된 부분입니다 ▼▼▼
+            # pve_inventory가 리스트 형식일 경우 딕셔너리로 변환
+            if 'pve_inventory' in player_data and isinstance(player_data['pve_inventory'], list):
+                old_inventory_list = player_data['pve_inventory']
+                new_inventory_dict = {}
+                for item in old_inventory_list:
+                    # 각 아이템의 개수를 세어서 딕셔너리에 저장
+                    new_inventory_dict[item] = new_inventory_dict.get(item, 0) + 1
+                
+                player_data['pve_inventory'] = new_inventory_dict
+                updated = True
+            # ▲▲▲ 여기가 추가된 부분입니다 ▲▲▲
+
+            # ... (임시 데이터 초기화 로직) ...
+
+        save_data(all_data)
+        await ctx.send(f"✅ 완료! 총 {len(all_data)}명의 유저 중 {updated_users}명의 데이터 구조를 업데이트했습니다.")  
 
 async def setup(bot):
     await bot.add_cog(MonsterCog(bot))
