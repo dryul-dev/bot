@@ -61,11 +61,17 @@ class PveBattle:
         self.turn_timer = asyncio.create_task(self.timeout_task())
 
     async def timeout_task(self):
+        """5분이 지나면 타임아웃으로 패배 처리합니다."""
         try:
-            await asyncio.sleep(300)
-            await self.channel.send("사냥 시간이 너무 오래 걸려 집중력을 잃었습니다...")
-            await self.end_battle(win=False)
-        except asyncio.CancelledError: pass
+            await asyncio.sleep(300) # 5분
+            
+            # ▼▼▼ 여기가 수정된 부분입니다 ▼▼▼
+            # end_battle에 패배 사유를 직접 전달합니다.
+            await self.end_battle(win=False, reason="사냥 시간이 너무 오래 걸려 집중력을 잃었습니다...")
+            # ▲▲▲ 여기가 수정된 부분입니다 ▲▲▲
+
+        except asyncio.CancelledError:
+            pass
 
     async def end_battle(self, win):
         if self.turn_timer: self.turn_timer.cancel()
@@ -90,7 +96,10 @@ class PveBattle:
                 embed.add_field(name="획득 재료", value="\n".join(f"- {mat}" for mat in materials_won), inline=True)
             await self.channel.send(embed=embed)
         else:
-            await self.channel.send("사냥에 실패했다...일단 보건실에 가자.")
+            # ▼▼▼ 여기가 수정된 부분입니다 ▼▼▼
+            # 전달받은 reason이 있으면 그것을 사용하고, 없으면 기본 메시지를 사용합니다.
+            final_reason = reason if reason else "사냥에 실패했다...일단 보건실에 가자."
+            await self.channel.send(final_reason)
     
     async def monster_turn(self):
         await self.channel.send("--- 몬스터의 턴 ---")
@@ -118,7 +127,10 @@ class PveBattle:
 
         await self.channel.send(embed=discord.Embed(description=log_message, color=0xDC143C))
         await asyncio.sleep(2)
-        if player['current_hp'] <= 0: await self.end_battle(win=False); return
+        if player['current_hp'] <= 0:
+        # 패배 사유를 명확하게 전달
+            await self.end_battle(win=False, reason=f"{monster['name']}의 공격에 쓰러졌습니다...")
+            return
 
         self.current_turn = "player"
         embed = discord.Embed(title="▶️ 당신의 턴입니다", color=player['color'])
