@@ -355,53 +355,66 @@ class BattleCog(commands.Cog):
 
 
     
+# cogs/battle.py 의 BattleCog 클래스 내부
+
     @commands.command(name="공격")
     async def attack(self, ctx, target_user: discord.Member = None):
-        print(f"--- [LOG] !공격 명령어 감지: {ctx.author.name} ---")
+        print(f"\n--- [DEBUG] !공격 감지 (사용자: {ctx.author.name}) ---")
         battle = self.active_battles.get(ctx.channel.id)
-        if not battle: return
+        if not battle:
+            print("[DEBUG] 1. 실패: 현재 채널에서 진행중인 전투 객체를 찾지 못했습니다.")
+            return
 
-        # --- 1. 전투 타입에 따라 공격자와 타겟을 명확히 설정 ---
+        print(f"[DEBUG] 1. 전투 객체 확인 완료: {type(battle).__name__}")
+
+        # --- 2. 턴 확인 및 공격자/타겟 정보 가져오기 ---
         attacker = None
         target = None
         
         # [ PvE 전투일 경우 ]
         if isinstance(battle, PveBattle):
+            print("[DEBUG] 2a. PvE 전투로 판단.")
             if battle.current_turn != "player" or ctx.author.id != battle.player_stats['id']:
-                return # 턴이 아니면 조용히 종료
+                print(f"[DEBUG] 실패: PvE 턴이 아님 (현재 턴: {battle.current_turn})")
+                return
             attacker = battle.player_stats
             target = battle.monster_stats
 
         # [ PvP 전투일 경우 ]
         elif isinstance(battle, (Battle, TeamBattle)):
-            # 공통 턴 확인
+            print("[DEBUG] 2a. PvP 전투로 판단.")
             current_player_id = battle.current_turn_player.id if isinstance(battle, Battle) else battle.current_turn_player_id
-            if ctx.author.id != current_player_id: return
-            if battle.turn_actions_left <= 0: return await ctx.send("행동력이 없습니다.", delete_after=10)
+            if ctx.author.id != current_player_id:
+                print(f"[DEBUG] 실패: PvP 턴이 아님 (현재 턴 ID: {current_player_id}, 사용자 ID: {ctx.author.id})")
+                return
+            if battle.turn_actions_left <= 0:
+                print("[DEBUG] 실패: 행동력이 없습니다.")
+                return await ctx.send("행동력이 없습니다.", delete_after=10)
             
             # 1:1 대결 타겟 설정
             if isinstance(battle, Battle):
+                print("[DEBUG] 2b. 1:1 대결 타겟 설정 시도.")
                 opponent_user = battle.p2_user if ctx.author.id == battle.p1_user.id else battle.p1_user
-                target_user = target_user or opponent_user # 멘션 없으면 상대를 자동 타겟
+                target_user = target_user or opponent_user
                 attacker = battle.get_player_stats(ctx.author)
                 target = battle.get_player_stats(target_user)
 
             # 팀 대결 타겟 설정
             elif isinstance(battle, TeamBattle):
+                print("[DEBUG] 2b. 팀 대결 타겟 설정 시도.")
                 if not target_user: return await ctx.send("팀 대결에서는 공격 대상을 `@멘션`으로 지정해주세요.")
                 if target_user.id not in battle.players: return await ctx.send("유효하지 않은 대상입니다.", delete_after=10)
-                
                 is_opponent = (ctx.author.id in battle.team_a_ids and target_user.id in battle.team_b_ids) or \
                               (ctx.author.id in battle.team_b_ids and target_user.id in battle.team_a_ids)
                 if not is_opponent: return await ctx.send("❌ 같은 팀원은 공격할 수 없습니다.", delete_after=10)
-                
                 attacker = battle.players[ctx.author.id]
                 target = battle.players[target_user.id]
         
-        # 공격자 또는 타겟 설정에 실패했다면 함수 종료
         if not attacker or not target:
+            print(f"[DEBUG] 2c. 실패: 공격자({attacker}) 또는 타겟({target}) 정보 설정에 실패했습니다.")
             return
-
+            
+        print(f"[DEBUG] 2c. 공격자({attacker['name']}) 및 타겟({target['name']}) 정보 확인 완료.")
         # --- 2. 공격 가능 여부 확인 (사거리 등) ---
         can_attack, attack_type = False, ""
         if isinstance(battle, PveBattle):
@@ -414,7 +427,11 @@ class BattleCog(commands.Cog):
                 attack_type = "근거리" if distance == 1 else "원거리"; can_attack = True
             elif attacker['class'] == '검사' and distance == 1: can_attack, attack_type = True, "근거리"
         
-        if not can_attack: return await ctx.send("❌ 공격 사거리가 아닙니다.", delete_after=10)
+        if not can_attack: 
+            print("[DEBUG] 3. 실패: 공격 사거리가 아닙니다.")
+            return await ctx.send("❌ 공격 사거리가 아닙니다.", delete_after=10)
+        
+        print("[DEBUG] 3. 공격 가능 여부 확인 완료.")
 
         # 데미지 계산
         base_damage = attacker['physical'] + random.randint(0, attacker['mental']) if attack_type == "근거리" else attacker['mental'] + random.randint(0, attacker['physical'])
@@ -457,6 +474,7 @@ class BattleCog(commands.Cog):
         # 최종 데미지 계산
         total_damage = round(base_damage * multiplier) + attribute_damage
         final_damage = max(1, total_damage - target.get('defense', 0))
+        print(f"[DEBUG] 4. 데미지 계산 완료 (데미지: {final_damage}).")
 
         target['current_hp'] = max(0, target['current_hp'] - final_damage)
         battle.add_log(f"💥 {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해를 입혔습니다!")
