@@ -38,6 +38,7 @@ class Battle:
         self.grid[self.p2_stats['pos']] = self.p2_stats['emoji']
         self.current_turn_player = random.choice([self.p1_user, self.p2_user])
         self.turn_actions_left = 2
+        self.battle_type = "pvp_1v1" # 꼬리표 추가
         
 
     def _setup_player_stats(self, all_data, user):
@@ -172,6 +173,7 @@ class TeamBattle(Battle): # Battle 클래스의 기능을 상속받음
         self.current_turn_player_id = None
         self.turn_actions_left = 2
         self.turn_timer = None
+        self.battle_type = "pvp_team"
     
     async def next_turn(self):
         self.turn_index = (self.turn_index + 1) % 4
@@ -359,49 +361,29 @@ class BattleCog(commands.Cog):
 
     @commands.command(name="공격")
     async def attack(self, ctx, target_user: discord.Member = None):
-        print(f"\n--- [DEBUG] !공격 감지 (사용자: {ctx.author.name}) ---")
         battle = self.active_battles.get(ctx.channel.id)
-        if not battle:
-            print("[DEBUG] 1. 실패: 현재 채널에서 진행중인 전투 객체를 찾지 못했습니다.")
-            return
+        if not battle: return
 
-        print(f"[DEBUG] 1. 전투 객체 확인 완료: {type(battle).__name__}")
+        attacker, target = None, None
 
-        # --- 2. 턴 확인 및 공격자/타겟 정보 가져오기 ---
-        attacker = None
-        target = None
+        # --- 1. battle_type 꼬리표로 전투 종류 확인 ---
         
-        # [ PvE 전투일 경우 ]
-        if isinstance(battle, PveBattle):
-            print("[DEBUG] 2a. PvE 전투로 판단.")
-            if battle.current_turn != "player" or ctx.author.id != battle.player_stats['id']:
-                print(f"[DEBUG] 실패: PvE 턴이 아님 (현재 턴: {battle.current_turn})")
-                return
+        if battle.battle_type == "pve":
+            if battle.current_turn != "player" or ctx.author.id != battle.player_stats['id']: return
             attacker = battle.player_stats
             target = battle.monster_stats
+        
+        elif battle.battle_type in ["pvp_1v1", "pvp_team"]:
+            current_player_id = battle.current_turn_player.id if battle.battle_type == "pvp_1v1" else battle.current_turn_player_id
+            if ctx.author.id != current_player_id: return
+            if battle.turn_actions_left <= 0: return await ctx.send("행동력이 없습니다.", delete_after=10)
 
-        # [ PvP 전투일 경우 ]
-        elif isinstance(battle, (Battle, TeamBattle)):
-            print("[DEBUG] 2a. PvP 전투로 판단.")
-            current_player_id = battle.current_turn_player.id if isinstance(battle, Battle) else battle.current_turn_player_id
-            if ctx.author.id != current_player_id:
-                print(f"[DEBUG] 실패: PvP 턴이 아님 (현재 턴 ID: {current_player_id}, 사용자 ID: {ctx.author.id})")
-                return
-            if battle.turn_actions_left <= 0:
-                print("[DEBUG] 실패: 행동력이 없습니다.")
-                return await ctx.send("행동력이 없습니다.", delete_after=10)
-            
-            # 1:1 대결 타겟 설정
-            if isinstance(battle, Battle):
-                print("[DEBUG] 2b. 1:1 대결 타겟 설정 시도.")
+            if battle.battle_type == "pvp_1v1":
                 opponent_user = battle.p2_user if ctx.author.id == battle.p1_user.id else battle.p1_user
                 target_user = target_user or opponent_user
                 attacker = battle.get_player_stats(ctx.author)
                 target = battle.get_player_stats(target_user)
-
-            # 팀 대결 타겟 설정
-            elif isinstance(battle, TeamBattle):
-                print("[DEBUG] 2b. 팀 대결 타겟 설정 시도.")
+            else: # pvp_team
                 if not target_user: return await ctx.send("팀 대결에서는 공격 대상을 `@멘션`으로 지정해주세요.")
                 if target_user.id not in battle.players: return await ctx.send("유효하지 않은 대상입니다.", delete_after=10)
                 is_opponent = (ctx.author.id in battle.team_a_ids and target_user.id in battle.team_b_ids) or \
@@ -409,11 +391,8 @@ class BattleCog(commands.Cog):
                 if not is_opponent: return await ctx.send("❌ 같은 팀원은 공격할 수 없습니다.", delete_after=10)
                 attacker = battle.players[ctx.author.id]
                 target = battle.players[target_user.id]
-        
-        if not attacker or not target:
-            print(f"[DEBUG] 2c. 실패: 공격자({attacker}) 또는 타겟({target}) 정보 설정에 실패했습니다.")
-            return
-            
+
+        if not attacker or not target: return
         print(f"[DEBUG] 2c. 공격자({attacker['name']}) 및 타겟({target['name']}) 정보 확인 완료.")
         # --- 2. 공격 가능 여부 확인 (사거리 등) ---
         can_attack, attack_type = False, ""

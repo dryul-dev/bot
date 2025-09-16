@@ -51,6 +51,7 @@ class PveBattle:
             "drops": monster_template['drops']
         }
         self.current_turn = "player"
+        self.battle_type = "pve"
 
     async def start_turn_timer(self):
         if self.turn_timer: self.turn_timer.cancel()
