@@ -634,7 +634,28 @@ class MonsterCog(commands.Cog):
                 
                 player_data['pve_inventory'] = new_inventory_dict
                 updated = True
-            # ▲▲▲ 여기가 추가된 부분입니다 ▲▲▲
+    
+            old_name = "하급 가죽 장갑"
+            new_name = "가죽 장갑"
+
+            # pve_inventory (재료)
+            if player_data.get('pve_inventory', {}).get(old_name):
+                count = player_data['pve_inventory'][old_name]
+                del player_data['pve_inventory'][old_name]
+                player_data['pve_inventory'][new_name] = count
+            
+            # pve_item_bag (완성품)
+            if player_data.get('pve_item_bag', {}).get(old_name):
+                count = player_data['pve_item_bag'][old_name]
+                del player_data['pve_item_bag'][old_name]
+                player_data['pve_item_bag'][new_name] = count
+
+            # equipped_gear (장착 장비)
+            if old_name in player_data.get('equipped_gear', []):
+                # 리스트의 모든 old_name을 new_name으로 교체
+                player_data['equipped_gear'] = [new_name if item == old_name else item for item in player_data['equipped_gear']]
+
+
             if 'today_blessing' not in player_data:
                 player_data.setdefault('today_blessing', None)
                 updated = True
