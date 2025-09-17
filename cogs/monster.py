@@ -57,25 +57,21 @@ EQUIPMENT_EFFECTS = {
 }
 
 class PveBattle:
-    def __init__(self, channel, player_user, active_battles_ref, hunting_ground_name, monster_name):
+ # cogs/monster.py 의 PveBattle 클래스 내부
 
-        
+    def __init__(self, channel, player_user, active_battles_ref, hunting_ground_name, monster_name):
         self.channel = channel
         self.player_user = player_user
         self.active_battles = active_battles_ref
         self.turn_timer = None
         self.battle_type = "pve"
         self.battle_log = ["사냥을 시작합니다!"]
-
-
         
         all_data = load_data()
         player_data = all_data.get(str(player_user.id), {})
         
         level = 1 + ((player_data.get('mental', 0) + player_data.get('physical', 0)) // 5)
         player_hp = max(1, level * 10 + player_data.get('physical', 0))
-
-
         
         self.player_stats = {
             "id": player_user.id, "name": player_data.get('name', 'Unknown'), 
@@ -84,27 +80,19 @@ class PveBattle:
             "physical": player_data.get('physical', 0), "level": level, "hp": player_hp, 
             "current_hp": player_hp, "pve_defense": 0,
             "color": int(player_data.get('color', '#FFFFFF')[1:], 16), "special_cooldown": 0,
-            "effects": {} # 버프/디버프를 위한 효과 딕셔너리
+            "effects": {}
         }
 
-        equipped_gear = player_data.get("equipped_gear", [])
-        gear_damage_bonus = 0
-        for item in equipped_gear:
-            # EQUIPMENT_EFFECTS 딕셔너리가 이 파일 상단에 정의되어 있어야 합니다.
-            effect = EQUIPMENT_EFFECTS.get(item, {})
-            gear_damage_bonus += effect.get("final_damage_bonus", 0)
-
-        monster_name = random.choice(list(MONSTER_DATA.keys()))
+        # ▼▼▼ 여기가 수정된 부분입니다 ▼▼▼
+        # 랜덤 선택 대신, !사냥 명령어가 전달해준 monster_name을 사용합니다.
         monster_template = MONSTER_DATA[monster_name]
         
         avg_player_damage = (self.player_stats['physical'] + self.player_stats['mental']) / 2 + self.player_stats['level']
 
         if hunting_ground_name == "자작나무 숲":
-            # 자작나무 숲: 약간 더 강함
-            monster_hp = round(max(20, avg_player_damage * random.uniform(4.0, 5.0)))
-            monster_ap = round(max(5, self.player_stats['hp'] / random.uniform(5.0, 6.0)))
-        else:
-            # 기본("마을 인근") 난이도
+            monster_hp = round(max(20, avg_player_damage * random.uniform(3.0, 4.5)))
+            monster_ap = round(max(5, self.player_stats['hp'] / random.uniform(5.0, 7.0)))
+        else: # "마을 인근" 등 기본 난이도
             monster_hp = round(max(15, avg_player_damage * random.uniform(2.5, 3.5)))
             monster_ap = round(max(3, self.player_stats['hp'] / random.uniform(6.0, 8.0)))
         
@@ -113,7 +101,12 @@ class PveBattle:
             "hp": monster_hp, "current_hp": monster_hp, "ap": monster_ap,
             "drops": monster_template['drops']
         }
+        # ▲▲▲ 여기가 수정된 부분입니다 ▲▲▲
+
         self.current_turn = "player"
+
+
+        
     def add_log(self, message):
         self.battle_log.append(message)
         if len(self.battle_log) > 5:
