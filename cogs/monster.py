@@ -15,7 +15,7 @@ def save_data(data):
 
 MONSTER_DATA = {
     "슬라임": { "attribute": "Heart", "drops": [{"name": "끈적한 점액", "chance": 0.8}, {"name": "슬라임의 핵", "chance": 0.2}] },
-    "고블린": { "attribute": "Gut", "drops": [{"name": "낡은 단검", "chance": 0.5}, {"name": "가죽 조각", "chance": 0.7}] },
+    "고블린": { "attribute": "Gut", "drops": [{"name": "낡은 단검", "chance": 0.5}, {"name": "가죽 조각", "chance": 0.5}] },
     "임프": { "attribute": "Wit", "drops": [{"name": "작은 날개", "chance": 0.6}, {"name": "마력의 가루", "chance": 0.4}] }
 }
 
@@ -158,8 +158,7 @@ class MonsterCog(commands.Cog):
     async def loot(self, ctx):
         """자신이 보유한 골드와 PvE 재료를 확인합니다."""
         all_data = load_data()
-        player_id = str(ctx.author.id)
-        player_data = all_data.get(player_id)
+        player_data = all_data.get(str(ctx.author.id))
 
         if not player_data or not player_data.get("registered"):
             return await ctx.send("먼저 `!등록`을 진행해주세요.")
@@ -169,7 +168,7 @@ class MonsterCog(commands.Cog):
 
         # Embed 생성
         embed = discord.Embed(
-            title=f"💰 {ctx.author.display_name}의 전리품",
+            title=f"💰 {player_data['name']}의 전리품",
             color=int(player_data.get('color', '#FFFFFF')[1:], 16)
         )
         embed.add_field(name="보유 골드", value=f"`{gold}` G", inline=False)
@@ -189,6 +188,86 @@ class MonsterCog(commands.Cog):
         embed.set_footer(text="재료 보관함이 가득 차면, 시장에서 판매해야 합니다.")
         await ctx.send(embed=embed)
 
+        # cogs/monster.py 의 MonsterCog 클래스 내부에 추가
+
+    @commands.command(name="아이템")
+    async def use_pve_item(self, ctx, *, item_name: str):
+        """사냥 중에 전투용 아이템을 사용합니다."""
+        battle = self.active_battles.get(ctx.channel.id)
+        
+        # 1. PvE 전투 중인지, 본인의 턴이 맞는지 확인
+        if not isinstance(battle, PveBattle) or battle.current_turn != "player" or ctx.author.id != battle.player_user.id:
+            return await ctx.send("사냥 중인 자신의 턴에만 사용할 수 있습니다.")
+
+        all_data = load_data()
+        player_id_str = str(ctx.author.id)
+        player_data = all_data.get(player_id_str)
+        pve_inventory = player_data.get("pve_inventory", {})
+
+        # 2. 아이템 보유 여부 확인
+        if item_name not in pve_inventory or pve_inventory[item_name] <= 0:
+            return await ctx.send(f"'{item_name}' 아이템을 가지고 있지 않습니다.")
+
+        player = battle.player_stats
+        
+        # 3. 아이템 효과 적용 (나중에 아이템 종류에 따라 확장 가능)
+        item_used = False
+        if item_name == "하급 체력 포션": # 예시 아이템
+            heal_amount = 50
+            player['current_hp'] = min(player['hp'], player['current_hp'] + heal_amount)
+            battle.add_log(f"🧪 {player['name']}이(가) 하급 체력 포션을 사용하여 체력을 {heal_amount} 회복했습니다.")
+            item_used = True
+        
+        # 4. 아이템 사용 처리
+        if item_used:
+            pve_inventory[item_name] -= 1
+            if pve_inventory[item_name] == 0:
+                del pve_inventory[item_name]
+            save_data(all_data)
+            
+            # 아이템 사용 후 상황판을 다시 보여줌 (턴은 소모하지 않음)
+            embed = discord.Embed(title="아이템 사용", description=f"{player['name']}의 턴이 계속됩니다.", color=player['color'])
+            embed.add_field(name=f"{player['name']}", value=f"HP: {player['current_hp']}/{player['hp']}", inline=True)
+            embed.add_field(name=f"{battle.monster_stats['name']}", value=f"HP: {battle.monster_stats['current_hp']}/{battle.monster_stats['hp']}", inline=True)
+            await ctx.send(embed=embed)
+        else:
+            await ctx.send(f"'{item_name}'은 전투 중에 사용할 수 없는 아이템입니다.")
+
+# cogs/monster.py 의 MonsterCog 클래스 내부에 추가
+
+    @commands.command(name="아이템가방")
+    async def item_bag(self, ctx):
+        """자신이 보유한 PvE 장비 및 소모품을 확인합니다."""
+        all_data = load_data()
+        player_id = str(ctx.author.id)
+        player_data = all_data.get(player_id)
+
+        if not player_data or not player_data.get("registered"):
+            return await ctx.send("먼저 `!등록`을 진행해주세요.")
+
+        # pve_item_bag이 없을 경우를 대비해 기본값으로 빈 딕셔너리 설정
+        pve_item_bag = player_data.get("pve_item_bag", {})
+        
+        # Embed 생성
+        embed = discord.Embed(
+            title=f"🎒 {player_data.get('name', ctx.author.display_name)}의 아이템 가방",
+            description="사냥과 전투에 사용하는 장비와 소모품을 보관합니다.",
+            color=int(player_data.get('color', '#FFFFFF')[1:], 16)
+        )
+        
+        # 아이템 목록 생성
+        if not pve_item_bag:
+            item_list = "아직 아이템이 없습니다."
+        else:
+            # pve_item_bag은 {"아이템 이름": 개수} 형태의 딕셔너리
+            item_list = "\n".join(f"- {name}: `{count}`개" for name, count in pve_item_bag.items())
+        
+        embed.add_field(
+            name="보유 아이템",
+            value=item_list,
+            inline=False
+        )
+        await ctx.send(embed=embed)
 
     @commands.command(name="사냥")
     async def hunt(self, ctx):
@@ -256,6 +335,9 @@ class MonsterCog(commands.Cog):
                 player_data.setdefault('last_goal_date', None)
                 updated = True
 
+            if 'pve_item_bag' not in player_data:
+                player_data.setdefault('pve_item_bag', {})
+                updated = True
             # ... (임시 데이터 초기화 로직) ...
 
         save_data(all_data)

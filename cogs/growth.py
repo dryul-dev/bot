@@ -82,8 +82,9 @@ class GrowthCog(commands.Cog):
                 "advanced_class": None,
                 "school_points": 0,
                 "inventory": [],
-                "gold": 0, # PvE 골드
-                "pve_inventory": []
+                "gold": 0,
+                "pve_inventory": {}, # 재료 보관함
+                "pve_item_bag": {} # 완성품아이템보관함
             }
             save_data(all_data)
             await ctx.send("🎉 등록이 완료되었습니다!")
@@ -208,6 +209,7 @@ class GrowthCog(commands.Cog):
             'challenge_type': None,
             'challenge_registered_today': False,
             'rest_buff_active': False
+            
         }
         # ▲▲▲ 여기가 수정된 부분입니다 ▲▲▲
         
