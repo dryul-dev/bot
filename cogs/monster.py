@@ -14,13 +14,28 @@ def save_data(data):
     with open("player_data.json", 'w', encoding='utf-8') as f: json.dump(data, f, indent=4, ensure_ascii=False)
 
 
+# cogs/monster.py 상단
+
 HUNTING_GROUNDS = {
     "마을 인근": {
-        "monsters": ["슬라임", "고블린", "임프"]
+        "monsters": ["슬라임", "고블린", "임프"],
+        "difficulty": {
+            "hp_mult": [2.5, 3.5],
+            "ap_div": [6.0, 8.0],
+            "min_hp": 15,
+            "min_ap": 3
+        }
     },
     "자작나무 숲": {
-        "monsters": ["성난 늑대", "오염된 정령"]
+        "monsters": ["성난 늑대", "오염된 정령"],
+        "difficulty": {
+            "hp_mult": [3.0, 4.5],
+            "ap_div": [5.0, 7.0],
+            "min_hp": 20,
+            "min_ap": 5
+        }
     }
+    # 나중에 새로운 사냥터를 추가할 때 이 형식에 맞춰 추가하기만 하면 됩니다.
 }
 
                     # 드랍 확률이 낮은 재료부터 작성해야 오류가 안 남!!
@@ -89,13 +104,17 @@ class PveBattle:
         
         avg_player_damage = (self.player_stats['physical'] + self.player_stats['mental']) / 2 + self.player_stats['level']
 
-        if hunting_ground_name == "자작나무 숲":
-            monster_hp = round(max(20, avg_player_damage * random.uniform(3.0, 4.5)))
-            monster_ap = round(max(5, self.player_stats['hp'] / random.uniform(5.0, 7.0)))
-        else: # "마을 인근" 등 기본 난이도
-            monster_hp = round(max(15, avg_player_damage * random.uniform(2.5, 3.5)))
-            monster_ap = round(max(3, self.player_stats['hp'] / random.uniform(6.0, 8.0)))
+        difficulty = HUNTING_GROUNDS[hunting_ground_name]["difficulty"]
         
+        hp_multiplier_range = difficulty["hp_mult"]
+        ap_divider_range = difficulty["ap_div"]
+        min_hp = difficulty["min_hp"]
+        min_ap = difficulty["min_ap"]
+
+        monster_hp = round(max(min_hp, avg_player_damage * random.uniform(*hp_multiplier_range)))
+        monster_ap = round(max(min_ap, self.player_stats['hp'] / random.uniform(*ap_divider_range)))
+
+
         self.monster_stats = {
             "name": monster_name, "level": level, "attribute": monster_template['attribute'], "defense": 0,
             "hp": monster_hp, "current_hp": monster_hp, "ap": monster_ap,
@@ -106,7 +125,7 @@ class PveBattle:
         self.current_turn = "player"
 
 
-        
+
     def add_log(self, message):
         self.battle_log.append(message)
         if len(self.battle_log) > 5:
