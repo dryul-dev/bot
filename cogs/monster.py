@@ -319,11 +319,17 @@ class MonsterCog(commands.Cog):
         )
         await ctx.send(embed=embed)
 
-# cogs/monster.py 의 MonsterCog 클래스 내부에 추가
 
     @commands.command(name="제작")
-    async def craft_item(self, ctx, material1: str, material2: str):
-        """두 개의 재료를 조합하여 아이템을 제작합니다."""
+    async def craft_item(self, ctx, *, recipe_string: str):
+        """두 개의 재료를 조합하여 아이템을 제작합니다. (!제작 재료1+재료2)"""
+        
+        # 1. '+'를 기준으로 재료 이름 분리
+        try:
+            material1, material2 = [m.strip() for m in recipe_string.split('+')]
+        except ValueError:
+            return await ctx.send("잘못된 형식입니다. `!제작 [재료1]+[재료2]` 형식으로 입력해주세요.")
+
         all_data = load_data()
         player_id = str(ctx.author.id)
         player_data = all_data.get(player_id)
@@ -333,34 +339,29 @@ class MonsterCog(commands.Cog):
 
         pve_inventory = player_data.get("pve_inventory", {})
         
-        # 재료 보유 여부 확인
+        # 2. 재료 보유 여부 확인
         required = {material1: 1, material2: 1} if material1 != material2 else {material1: 2}
         for item, amount in required.items():
             if pve_inventory.get(item, 0) < amount:
                 return await ctx.send(f"재료가 부족합니다: {item}")
         
-        # 레시피 확인
+        # 3. 레시피 확인
         recipe_key = tuple(sorted((material1, material2)))
         crafted_item = CRAFTING_RECIPES.get(recipe_key)
 
         if not crafted_item:
             return await ctx.send("...이 조합은 아닌 것 같다.")
 
-        # 재료 소모
+        # 4. 재료 소모 및 아이템 획득
         for item, amount in required.items():
             pve_inventory[item] -= amount
             if pve_inventory[item] == 0:
                 del pve_inventory[item]
         
-        # 아이템 획득
         pve_item_bag = player_data.get("pve_item_bag", {})
         pve_item_bag[crafted_item] = pve_item_bag.get(crafted_item, 0) + 1
         
-        # 데이터 저장
-        player_data["pve_inventory"] = pve_inventory
-        player_data["pve_item_bag"] = pve_item_bag
         save_data(all_data)
-
         await ctx.send(f"✨ **{crafted_item}** 제작에 성공했습니다!")
 
 
@@ -455,8 +456,12 @@ class MonsterCog(commands.Cog):
     async def hunt(self, ctx):
         if ctx.channel.id in self.active_battles: return await ctx.send("이 채널에서는 이미 다른 활동이 진행중입니다.")
         battle = PveBattle(ctx.channel, ctx.author, self.active_battles); self.active_battles[ctx.channel.id] = battle
-        embed = discord.Embed(title=f"몬스터 출현! - {battle.monster_stats['name']} (Lv.{battle.monster_stats['level']})", color=0xDC143C); embed.add_field(name=f"{battle.player_stats['name']} (Lv.{battle.player_stats['level']})", value=f"HP: {battle.player_stats['current_hp']}/{battle.player_stats['hp']}", inline=True); embed.add_field(name=f"{battle.monster_stats['name']}", value=f"HP: {battle.monster_stats['current_hp']}/{battle.monster_stats['hp']}", inline=True); embed.set_footer(text="당신의 턴입니다. (`!공격`, `!스킬 1`, `!도망`)"); await ctx.send(embed=embed); await battle.start_turn_timer()
-        # cogs/monster.py 의 MonsterCog 클래스 내부
+        embed = discord.Embed(title=f"몬스터 출현! - {battle.monster_stats['name']} (Lv.{battle.monster_stats['level']})", color=0xDC143C); embed.add_field(name=f"{battle.player_stats['name']} (Lv.{battle.player_stats['level']})", value=f"HP: {battle.player_stats['current_hp']}/{battle.player_stats['hp']}", inline=True); 
+        embed.add_field(name=f"{battle.monster_stats['name']}", value=f"HP: {battle.monster_stats['current_hp']}/{battle.monster_stats['hp']}", inline=True); 
+        embed.set_footer(text="당신의 턴입니다. (`!공격`, `!스킬 1`, `!아이템`, `!도망`)"); 
+        await ctx.send(embed=embed); 
+        await battle.start_turn_timer()
+  
 
     @commands.command(name="도망")
     async def flee(self, ctx):
