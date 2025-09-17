@@ -534,10 +534,11 @@ class GrowthCog(commands.Cog):
 
 
 
+# cogs/growth.py 의 GrowthCog 클래스 내부
+
     @commands.command(name="목표달성")
     async def achieve_goal(self, ctx, goal_number: int):
         """번호가 부여된 목표를 달성 처리합니다."""
-        # 1~3번 제한을 1~5번으로 변경
         if not (1 <= goal_number <= 5):
             return await ctx.send("1번에서 5번까지의 목표만 달성할 수 있습니다.")
 
@@ -565,15 +566,65 @@ class GrowthCog(commands.Cog):
         achieved_goal = goals.pop(goal_number - 1)
         player_data["goals"] = goals
         
-        reward_message = ""
-        if random.random() < 0.20:
+        # ▼▼▼ 여기가 수정된 부분입니다 ▼▼▼
+        # 확정 보상: 스쿨 포인트 +1
+        player_data['school_points'] = player_data.get('school_points', 0) + 2
+        
+        # 보상 메시지 목록 생성
+        reward_messages = ["\n\n**[ 획득 보상 ]**", "🎓 스쿨 포인트 +2"]
+        
+        # 10% 확률로 스탯 상승
+        if random.random() < 0.10:
             stat_choice = random.choice(['mental', 'physical'])
             player_data[stat_choice] = player_data.get(stat_choice, 0) + 1
             stat_kor = "정신" if stat_choice == 'mental' else "육체"
-            reward_message = f"\n\n**✨ 놀라운 성과! {stat_kor} 스탯이 1 상승했습니다!**"
-            
+            reward_messages.append(f"✨ **놀라운 성과! {stat_kor} 스탯이 1 상승했습니다!**")
+        
         save_data(all_data)
-        await ctx.send(f"🎉 **축하합니다!** '{achieved_goal}' 목표를 달성했습니다!{reward_message}")
+        
+        final_reward_text = "\n".join(reward_messages)
+        await ctx.send(f"🎉 **축하합니다!** '{achieved_goal}' 목표를 달성했습니다!{final_reward_text}")
+        # ▲▲▲ 여기가 수정된 부분입니다 ▲▲▲
+
+# cogs/growth.py 의 GrowthCog 클래스 내부에 추가
+
+    @commands.command(name="목표중단")
+    async def abandon_goal(self, ctx, goal_number: int):
+        """등록된 목표를 중단하고, 격려 포인트를 받습니다."""
+        if not (1 <= goal_number <= 5):
+            return await ctx.send("1번에서 5번까지의 목표만 중단할 수 있습니다.")
+
+        all_data = load_data()
+        player_id = str(ctx.author.id)
+        player_data = all_data.get(player_id)
+
+        if not player_data or not player_data.get("registered"):
+            return await ctx.send("먼저 `!등록`을 진행해주세요.")
+
+        goals = player_data.get("goals", [])
+        
+        if len(goals) < goal_number:
+            return await ctx.send(f"{goal_number}번 목표가 존재하지 않습니다.")
+
+        goal_to_abandon = goals[goal_number - 1]
+
+        # 사용자에게 재확인
+        await ctx.send(f"**'{goal_to_abandon}'** 목표를 정말로 중단하시겠습니까? (30초 안에 `예` 입력)")
+        def check(m): return m.author == ctx.author and m.channel == ctx.channel and m.content.lower() == '예'
+        try:
+            await self.bot.wait_for('message', check=check, timeout=30.0)
+        except asyncio.TimeoutError:
+            return await ctx.send("시간이 초과되어 목표 중단이 취소되었습니다.")
+
+        # 목표 목록에서 제거
+        abandoned_goal = goals.pop(goal_number - 1)
+        player_data["goals"] = goals
+        
+        # 격려 보상: 스쿨 포인트 +1
+        player_data['school_points'] = player_data.get('school_points', 0) + 1
+        save_data(all_data)
+
+        await ctx.send(f"😊 **'{abandoned_goal}'** 목표를 중단했습니다. 다음 도전을 응원합니다! (스쿨 포인트 +1)")
 
 
 
