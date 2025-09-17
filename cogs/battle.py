@@ -356,40 +356,6 @@ class BattleCog(commands.Cog):
         battle.add_log(f"🚶 {p_stats['name']}이(가) 이동했습니다.")
         await battle.handle_action_cost(1)
 
-    '''
-    @commands.command(name="공격")
-    async def attack(self, ctx, target_user: discord.Member = None):
-        battle, current_player_id = await self.get_current_player_and_battle(ctx)
-        if not battle: return
-
-        # --- 공격자 및 타겟 정보 설정 ---
-        attacker = battle.player_stats
-        target = battle.monster_stats
-
-
-        # --- 공격 타입 결정 ---
-        attack_type = "근거리" if attacker['class'] == '검사' else ("근거리" if attacker.get('physical', 0) >= attacker.get('mental', 0) else "원거리")
-
-
-        # --- 데미지 계산 ---
-        base_damage = attacker['physical'] + random.randint(0, attacker['mental']) if attack_type == "근거리" else attacker['mental'] + random.randint(0, attacker['physical'])
-        final_damage = max(1, round(base_damage * 1.0)) # 테스트를 위해 모든 배율 제거
-
-
-        # --- 데미지 적용 ---
-        target['current_hp'] = max(0, target['current_hp'] - final_damage)
-        battle.add_log(f"💥 {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해!")
-
-
-        # --- 후속 처리 ---
-        if target['current_hp'] <= 0:
-
-            await battle.end_battle(win=True)
-        else:
-
-            await battle.monster_turn()
-        '''
-
     @commands.command(name="공격")
     async def attack(self, ctx, target_user: discord.Member = None):
         battle, current_player_id = await self.get_current_player_and_battle(ctx)
@@ -443,8 +409,10 @@ class BattleCog(commands.Cog):
         attacker_effects = attacker.get('effects', {})
         if 'next_attack_multiplier' in attacker_effects:
             multiplier = attacker_effects.pop('next_attack_multiplier', 1.0); battle.add_log(f"✨ 영창 효과! 데미지가 {multiplier}배 증폭!")
+
         elif attacker.get('double_damage_buff', 0) > 0:
-            multiplier = 2.0; attacker['double_damage_buff'] -= 1; battle.add_log(f"🔥 분노의 일격! (남은 횟수: {attacker['double_damage_buff']}회)")
+            multiplier = 2.0; attacker['double_damage_buff'] -= 1
+            battle.add_log(f"✨ 강화된 공격! 데미지가 2배로 적용됩니다! (남은 횟수: {attacker['double_damage_buff']}회)")
         elif random.random() < 0.10: 
             multiplier = 2.0; battle.add_log(f"💥 치명타 발생!")
         else:
@@ -530,9 +498,9 @@ class BattleCog(commands.Cog):
                 return await ctx.send("시간이 초과되어 취소되었습니다.")
 
         elif player_class == '마검사':
-            heal_amount = p_stats['level']
-            p_stats['current_hp'] = min(p_stats['max_hp'], p_stats['current_hp'] + heal_amount)
-            battle.add_log(f"💚 {p_stats['name']}이(가) 체력을 **{heal_amount}**만큼 회복했습니다!")
+            # 'double_damage_buff' 횟수를 1로 설정합니다.
+            p_stats['double_damage_buff'] = p_stats.get('double_damage_buff', 0) + 1
+            battle.add_log(f"✨ {p_stats['name']}이(가) 검에 마력을 주입합니다! 다음 공격이 강화됩니다!")
 
         elif player_class == '검사':
             self_damage = p_stats['level']
