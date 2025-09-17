@@ -101,8 +101,8 @@ class PveBattle:
 
         if hunting_ground_name == "자작나무 숲":
             # 자작나무 숲: 약간 더 강함
-            monster_hp = round(max(20, avg_player_damage * random.uniform(3.0, 4.5)))
-            monster_ap = round(max(5, self.player_stats['hp'] / random.uniform(5.0, 7.0)))
+            monster_hp = round(max(20, avg_player_damage * random.uniform(4.0, 5.0)))
+            monster_ap = round(max(5, self.player_stats['hp'] / random.uniform(5.0, 6.0)))
         else:
             # 기본("마을 인근") 난이도
             monster_hp = round(max(15, avg_player_damage * random.uniform(2.5, 3.5)))
