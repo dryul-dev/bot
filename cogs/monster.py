@@ -30,9 +30,9 @@ CRAFTING_RECIPES = {
 
 # 시장에서 거래되는 아이템 정보 (구매가/판매가)
 MARKET_ITEMS = {
-    "하급 체력 포션": {"buy": 10, "sell": 8},
-    "하급 폭탄": {"buy": 15, "sell": 12},
-    "하급 수리검": {"buy": 7, "sell": 5}
+    "하급 체력 포션": {"buy": 20, "sell": 12},
+    "하급 폭탄": {"buy": 30, "sell": 18},
+    "하급 수리검": {"buy": 12, "sell": 8}
 }
 
 class PveBattle:
