@@ -487,7 +487,15 @@ class MonsterCog(commands.Cog):
         save_data(all_data)
         await ctx.send(f"**{item_name}** 판매를 완료했습니다! (남은 골드: `{player_data['gold']}`G)")
 
-# cogs/monster.py 의 MonsterCog 클래스 내부
+
+
+
+
+
+
+
+
+
 
     @commands.command(name="사냥")
     async def hunt(self, ctx, *, hunting_ground_name: str):
@@ -537,50 +545,43 @@ class MonsterCog(commands.Cog):
             await asyncio.sleep(1)
             await battle.monster_turn()
 
-# cogs/monster.py 의 MonsterCog 클래스 내부에 추가
 
-# cogs/monster.py 의 MonsterCog 클래스 내부
+
+
+
+
 
     @commands.command(name="장비")
     async def equipment_info(self, ctx):
-        """[디버깅 버전] 현재 장착한 장비를 확인합니다."""
-        print("\n--- [DEBUG] !장비 명령어 시작 ---")
+        """현재 장착한 장비를 확인합니다."""
         all_data = load_data()
         player_data = all_data.get(str(ctx.author.id), {})
         equipped_gear = player_data.get("equipped_gear", [])
 
-        # 터미널에 현재 상태를 정확히 출력
-        print(f"[DEBUG] 플레이어({ctx.author.name})가 장착한 장비 목록: {equipped_gear}")
-        print(f"[DEBUG] 코드에 정의된 EQUIPMENT_EFFECTS 키 목록: {list(EQUIPMENT_EFFECTS.keys())}")
-
-        embed = discord.Embed(title=f"🛠️ {player_data.get('name', ctx.author.display_name)}의 장비", color=int(player_data.get('color', '#FFFFFF')[1:], 16))
+        embed = discord.Embed(
+            title=f"🛠️ {player_data.get('name', ctx.author.display_name)}의 장비",
+            color=int(player_data.get('color', '#FFFFFF')[1:], 16)
+        )
         
         if not equipped_gear:
             embed.description = "장착한 장비가 없습니다."
         else:
             for item_name in equipped_gear:
-                # 터미널에 각 아이템 이름을 대괄호로 감싸서 출력 (공백 확인용)
-                print(f"\n[DEBUG] 처리 중인 아이템: '[{item_name}]'")
-                
                 effect = EQUIPMENT_EFFECTS.get(item_name, {})
+                effect_str = "효과 없음" # 기본값
                 
-                if effect:
-                    print(f"  -> '{item_name}'에 대한 효과를 찾음: {effect}")
-                else:
-                    print(f"  -> '{item_name}'에 대한 효과를 찾지 못함 (효과 없음)")
-
-                effect_str = "효과 없음"
+                # 향후 다른 종류의 효과가 추가될 것을 대비한 구조
                 if "final_damage_bonus" in effect:
                     effect_str = f"최종 데미지 +{effect['final_damage_bonus']}"
+                
                 embed.add_field(name=item_name, value=effect_str, inline=False)
         
         embed.set_footer(text=f"장착 슬롯: {len(equipped_gear)}/2")
-        
-        # 디스코드 채널에도 디버그 정보 추가
-        known_effects_str = "\n".join([f"- `{key}`" for key in EQUIPMENT_EFFECTS.keys()])
-        embed.add_field(name="[DEBUG] 코드에 정의된 효과 목록", value=known_effects_str, inline=False)
-
         await ctx.send(embed=embed)
+        await ctx.send(embed=embed)
+
+
+
     @commands.command(name="장착")
     async def equip_item(self, ctx, *, item_name: str):
         """아이템 가방에 있는 장비를 장착합니다."""
@@ -626,6 +627,12 @@ class MonsterCog(commands.Cog):
         player_data["equipped_gear"] = equipped_gear
         save_data(all_data)
         await ctx.send(f"☑️ **{item_name}**을(를) 장착 해제했습니다.")
+
+
+
+
+
+
 
 
 # cogs/growth.py의 fix_data_structure 함수 내부
