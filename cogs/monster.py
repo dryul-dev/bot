@@ -497,36 +497,45 @@ class MonsterCog(commands.Cog):
 
 
 
+# cogs/monster.py 의 MonsterCog 클래스 내부
+
     @commands.command(name="사냥")
     async def hunt(self, ctx, *, hunting_ground_name: str):
         """지정한 사냥터에서 몬스터 사냥을 시작합니다."""
         if ctx.channel.id in self.active_battles:
             return await ctx.send("이 채널에서는 이미 다른 활동이 진행중입니다.")
 
-        # 입력된 사냥터 이름이 유효한지 확인
-        if hunting_ground_name not in HUNTING_GROUNDS:
+        # 1. 사용자가 입력한 이름과 코드에 정의된 이름 모두에서 공백을 제거하고 비교
+        normalized_input = hunting_ground_name.replace(" ", "")
+        found_ground_name = None
+        for key in HUNTING_GROUNDS.keys():
+            if key.replace(" ", "") == normalized_input:
+                found_ground_name = key # 띄어쓰기가 포함된 '진짜' 이름을 저장
+                break
+        
+        # 2. 일치하는 사냥터가 없는 경우, 목록을 보여주고 종료
+        if not found_ground_name:
             valid_grounds = ", ".join(f"`{name}`" for name in HUNTING_GROUNDS.keys())
             return await ctx.send(f"존재하지 않는 사냥터입니다. (선택 가능: {valid_grounds})")
 
-        # 사냥터에 맞는 몬스터 목록에서 랜덤으로 하나 선택
-        monster_list = HUNTING_GROUNDS[hunting_ground_name]["monsters"]
+        # 3. 찾은 '진짜' 이름으로 몬스터 목록을 가져옴
+        monster_list = HUNTING_GROUNDS[found_ground_name]["monsters"]
         monster_to_spawn = random.choice(monster_list)
 
-        # 전투 시작
-        battle = PveBattle(ctx.channel, ctx.author, self.active_battles, hunting_ground_name, monster_to_spawn)
+        # 4. 전투 시작
+        battle = PveBattle(ctx.channel, ctx.author, self.active_battles, found_ground_name, monster_to_spawn)
         self.active_battles[ctx.channel.id] = battle
 
         embed = discord.Embed(
             title=f"몬스터 출현! - {battle.monster_stats['name']} (Lv.{battle.monster_stats['level']})",
-            description=f"**[{hunting_ground_name}]**에서 전투가 시작됩니다.",
+            description=f"**[{found_ground_name}]**에서 전투가 시작됩니다.",
             color=0xDC143C
         )
         embed.add_field(name=f"{battle.player_stats['name']} (Lv.{battle.player_stats['level']})", value=f"HP: {battle.player_stats['current_hp']}/{battle.player_stats['hp']}", inline=True)
         embed.add_field(name=f"{battle.monster_stats['name']}", value=f"HP: {battle.monster_stats['current_hp']}/{battle.monster_stats['hp']}", inline=True)
-        embed.set_footer(text="당신의 턴입니다. (`!공격`, `!스킬 1`, `!도망`)")
+        embed.set_footer(text="당신의 턴입니다. (`!공격`, `아이템 [아이템이름]`, `!스킬 1`, `!도망`)")
         await ctx.send(embed=embed)
         await battle.start_turn_timer()
-  
 
     @commands.command(name="도망")
     async def flee(self, ctx):
