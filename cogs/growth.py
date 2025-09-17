@@ -471,6 +471,111 @@ class GrowthCog(commands.Cog):
         await ctx.send(embed=embed)
 
     
+    @commands.command(name="목표등록")
+    async def register_goal(self, ctx, *, goal_name: str):
+        """오늘의 목표를 등록합니다. (하루에 한 번, 최대 5개)"""
+        all_data = load_data()
+        player_id = str(ctx.author.id)
+        player_data = all_data.get(player_id)
+
+        if not player_data or not player_data.get("registered"):
+            return await ctx.send("먼저 `!등록`을 진행해주세요.")
+
+        # 글자 수 제한 확인
+        if len(goal_name) > 10:
+            return await ctx.send("목표는 공백 포함 10자 이내로 설정해주세요.")
+
+        today_kst = datetime.now(self.KST).strftime('%Y-%m-%d')
+        last_goal_date = player_data.get("last_goal_date")
+
+        # 하루에 한 번만 등록 가능
+        if last_goal_date == today_kst:
+            return await ctx.send("목표는 하루에 하나만 등록할 수 있습니다. 내일 다시 시도해주세요.")
+
+        goals = player_data.get("goals", [])
+        if len(goals) >= 5:
+            return await ctx.send("최대 5개의 목표만 저장할 수 있습니다. `!목표달성`으로 공간을 확보해주세요.")
+
+        goals.append(goal_name)
+        player_data["goals"] = goals
+        player_data["last_goal_date"] = today_kst
+        save_data(all_data)
+
+        await ctx.send(f"✅ 새로운 목표가 등록되었습니다: **{goal_name}**")
+
+
+
+    @commands.command(name="목표조회")
+    async def view_goals(self, ctx):
+        """자신이 등록한 목표 목록을 확인합니다."""
+        all_data = load_data()
+        player_data = all_data.get(str(ctx.author.id))
+
+        if not player_data or not player_data.get("registered"):
+            return await ctx.send("먼저 `!등록`을 진행해주세요.")
+
+        goals = player_data.get("goals", [])
+        
+        embed = discord.Embed(
+            title=f"🎯 {ctx.author.display_name}의 목표 목록",
+            color=int(player_data.get('color', '#FFFFFF')[1:], 16)
+        )
+
+        if not goals:
+            goal_list_str = "아직 등록된 목표가 없습니다."
+        else:
+            # 모든 목표에 번호를 부여합니다.
+            goal_list_str = "\n".join(f"**{i+1}.** {goal}" for i, goal in enumerate(goals))
+
+        embed.description = goal_list_str
+        embed.set_footer(text="`!목표달성 [번호]`로 완료할 수 있습니다.")
+        await ctx.send(embed=embed)
+
+
+
+
+    @commands.command(name="목표달성")
+    async def achieve_goal(self, ctx, goal_number: int):
+        """번호가 부여된 목표를 달성 처리합니다."""
+        # 1~3번 제한을 1~5번으로 변경
+        if not (1 <= goal_number <= 5):
+            return await ctx.send("1번에서 5번까지의 목표만 달성할 수 있습니다.")
+
+        all_data = load_data()
+        player_id = str(ctx.author.id)
+        player_data = all_data.get(player_id)
+
+        if not player_data or not player_data.get("registered"):
+            return await ctx.send("먼저 `!등록`을 진행해주세요.")
+
+        goals = player_data.get("goals", [])
+        
+        if len(goals) < goal_number:
+            return await ctx.send(f"{goal_number}번 목표가 존재하지 않습니다.")
+
+        goal_to_achieve = goals[goal_number - 1]
+
+        await ctx.send(f"**'{goal_to_achieve}'** 목표를 달성한 것이 맞습니까? (30초 안에 `예` 입력)")
+        def check(m): return m.author == ctx.author and m.channel == ctx.channel and m.content.lower() == '예'
+        try:
+            await self.bot.wait_for('message', check=check, timeout=30.0)
+        except asyncio.TimeoutError:
+            return await ctx.send("시간이 초과되어 목표 달성이 취소되었습니다.")
+
+        achieved_goal = goals.pop(goal_number - 1)
+        player_data["goals"] = goals
+        
+        reward_message = ""
+        if random.random() < 0.20:
+            stat_choice = random.choice(['mental', 'physical'])
+            player_data[stat_choice] = player_data.get(stat_choice, 0) + 1
+            stat_kor = "정신" if stat_choice == 'mental' else "육체"
+            reward_message = f"\n\n**✨ 놀라운 성과! {stat_kor} 스탯이 1 상승했습니다!**"
+            
+        save_data(all_data)
+        await ctx.send(f"🎉 **축하합니다!** '{achieved_goal}' 목표를 달성했습니다!{reward_message}")
+
+
 
     @commands.command(name="수동초기화")
     @commands.is_owner() # 봇 소유자만 실행 가능하도록 제한

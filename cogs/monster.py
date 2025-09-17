@@ -249,6 +249,13 @@ class MonsterCog(commands.Cog):
                 player_data.setdefault('last_blessing_date', None)
                 updated = True
 
+            if 'goals' not in player_data:
+                player_data.setdefault('goals', [])
+                updated = True
+            if 'last_goal_date' not in player_data:
+                player_data.setdefault('last_goal_date', None)
+                updated = True
+
             # ... (임시 데이터 초기화 로직) ...
 
         save_data(all_data)
