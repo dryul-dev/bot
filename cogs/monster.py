@@ -19,6 +19,14 @@ MONSTER_DATA = {
     "임프": { "attribute": "Wit", "drops": [{"name": "작은 날개", "chance": 0.6}, {"name": "마력의 가루", "chance": 0.4}] }
 }
 
+
+CRAFTING_RECIPES = {
+    # 레시피의 키는 재료 이름들을 알파벳 순으로 정렬한 튜플입니다.
+    tuple(sorted(("끈적한 점액", "끈적한 점액"))): "하급 체력 포션",
+    tuple(sorted(("가죽 조각", "슬라임의 핵"))): "하급 폭탄",
+    tuple(sorted(("낡은 단검", "작은 날개"))): "하급 수리검"
+}
+
 class PveBattle:
     def __init__(self, channel, player_user, active_battles_ref):
 
@@ -188,52 +196,64 @@ class MonsterCog(commands.Cog):
         embed.set_footer(text="재료 보관함이 가득 차면, 시장에서 판매해야 합니다.")
         await ctx.send(embed=embed)
 
-        # cogs/monster.py 의 MonsterCog 클래스 내부에 추가
-
     @commands.command(name="아이템")
     async def use_pve_item(self, ctx, *, item_name: str):
         """사냥 중에 전투용 아이템을 사용합니다."""
         battle = self.active_battles.get(ctx.channel.id)
         
-        # 1. PvE 전투 중인지, 본인의 턴이 맞는지 확인
         if not isinstance(battle, PveBattle) or battle.current_turn != "player" or ctx.author.id != battle.player_user.id:
             return await ctx.send("사냥 중인 자신의 턴에만 사용할 수 있습니다.")
 
         all_data = load_data()
-        player_id_str = str(ctx.author.id)
-        player_data = all_data.get(player_id_str)
-        pve_inventory = player_data.get("pve_inventory", {})
+        player_data = all_data.get(str(ctx.author.id))
+        pve_item_bag = player_data.get("pve_item_bag", {})
 
-        # 2. 아이템 보유 여부 확인
-        if item_name not in pve_inventory or pve_inventory[item_name] <= 0:
+        if item_name not in pve_item_bag or pve_item_bag[item_name] <= 0:
             return await ctx.send(f"'{item_name}' 아이템을 가지고 있지 않습니다.")
 
         player = battle.player_stats
-        
-        # 3. 아이템 효과 적용 (나중에 아이템 종류에 따라 확장 가능)
+        monster = battle.monster_stats
         item_used = False
-        if item_name == "하급 체력 포션": # 예시 아이템
-            heal_amount = 50
-            player['current_hp'] = min(player['hp'], player['current_hp'] + heal_amount)
-            battle.add_log(f"🧪 {player['name']}이(가) 하급 체력 포션을 사용하여 체력을 {heal_amount} 회복했습니다.")
-            item_used = True
         
-        # 4. 아이템 사용 처리
+        # ▼▼▼ 여기가 수정/추가된 부분입니다 ▼▼▼
+        if item_name == "하급 체력 포션":
+            heal_amount = 5
+            player['current_hp'] = min(player['hp'], player['current_hp'] + heal_amount)
+            battle.add_log(f"🧪 {player['name']}이(가) {item_name}을(를) 사용하여 체력을 {heal_amount} 회복했습니다.")
+            item_used = True
+
+        elif item_name == "하급 폭탄":
+            damage = 10
+            monster['current_hp'] = max(0, monster['current_hp'] - damage)
+            battle.add_log(f"💣 {player['name']}이(가) {item_name}을(를) 사용하여 몬스터에게 **{damage}**의 피해를 입혔습니다!")
+            item_used = True
+
+        elif item_name == "하급 수리검":
+            damage = 5
+            monster['current_hp'] = max(0, monster['current_hp'] - damage)
+            battle.add_log(f"💨 {player['name']}이(가) {item_name}을(를) 던져 몬스터에게 **{damage}**의 피해를 입혔습니다!")
+            item_used = True
+        # ▲▲▲ 여기가 수정/추가된 부분입니다 ▲▲▲
+        
         if item_used:
-            pve_inventory[item_name] -= 1
-            if pve_inventory[item_name] == 0:
-                del pve_inventory[item_name]
+            # 아이템 소모
+            pve_item_bag[item_name] -= 1
+            if pve_item_bag[item_name] == 0:
+                del pve_item_bag[item_name]
             save_data(all_data)
             
+            # 몬스터가 죽었는지 확인
+            if monster['current_hp'] <= 0:
+                await battle.end_battle(win=True)
+                return
+
             # 아이템 사용 후 상황판을 다시 보여줌 (턴은 소모하지 않음)
             embed = discord.Embed(title="아이템 사용", description=f"{player['name']}의 턴이 계속됩니다.", color=player['color'])
             embed.add_field(name=f"{player['name']}", value=f"HP: {player['current_hp']}/{player['hp']}", inline=True)
-            embed.add_field(name=f"{battle.monster_stats['name']}", value=f"HP: {battle.monster_stats['current_hp']}/{battle.monster_stats['hp']}", inline=True)
+            embed.add_field(name=f"{monster['name']}", value=f"HP: {monster['current_hp']}/{monster['hp']}", inline=True)
             await ctx.send(embed=embed)
         else:
             await ctx.send(f"'{item_name}'은 전투 중에 사용할 수 없는 아이템입니다.")
-
-# cogs/monster.py 의 MonsterCog 클래스 내부에 추가
 
     @commands.command(name="아이템가방")
     async def item_bag(self, ctx):
@@ -251,7 +271,7 @@ class MonsterCog(commands.Cog):
         # Embed 생성
         embed = discord.Embed(
             title=f"🎒 {player_data.get('name', ctx.author.display_name)}의 아이템 가방",
-            description="사냥과 전투에 사용하는 장비와 소모품을 보관합니다.",
+            description="사냥에 사용하는 장비와 소모품을 보관합니다.",
             color=int(player_data.get('color', '#FFFFFF')[1:], 16)
         )
         
@@ -268,6 +288,50 @@ class MonsterCog(commands.Cog):
             inline=False
         )
         await ctx.send(embed=embed)
+
+# cogs/monster.py 의 MonsterCog 클래스 내부에 추가
+
+    @commands.command(name="제작")
+    async def craft_item(self, ctx, material1: str, material2: str):
+        """두 개의 재료를 조합하여 아이템을 제작합니다."""
+        all_data = load_data()
+        player_id = str(ctx.author.id)
+        player_data = all_data.get(player_id)
+
+        if not player_data or not player_data.get("registered"):
+            return await ctx.send("먼저 `!등록`을 진행해주세요.")
+
+        pve_inventory = player_data.get("pve_inventory", {})
+        
+        # 재료 보유 여부 확인
+        required = {material1: 1, material2: 1} if material1 != material2 else {material1: 2}
+        for item, amount in required.items():
+            if pve_inventory.get(item, 0) < amount:
+                return await ctx.send(f"재료가 부족합니다: {item}")
+        
+        # 레시피 확인
+        recipe_key = tuple(sorted((material1, material2)))
+        crafted_item = CRAFTING_RECIPES.get(recipe_key)
+
+        if not crafted_item:
+            return await ctx.send("...이 조합은 아닌 것 같다.")
+
+        # 재료 소모
+        for item, amount in required.items():
+            pve_inventory[item] -= amount
+            if pve_inventory[item] == 0:
+                del pve_inventory[item]
+        
+        # 아이템 획득
+        pve_item_bag = player_data.get("pve_item_bag", {})
+        pve_item_bag[crafted_item] = pve_item_bag.get(crafted_item, 0) + 1
+        
+        # 데이터 저장
+        player_data["pve_inventory"] = pve_inventory
+        player_data["pve_item_bag"] = pve_item_bag
+        save_data(all_data)
+
+        await ctx.send(f"✨ **{crafted_item}** 제작에 성공했습니다!")
 
     @commands.command(name="사냥")
     async def hunt(self, ctx):
