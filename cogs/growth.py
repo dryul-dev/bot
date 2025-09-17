@@ -531,11 +531,6 @@ class GrowthCog(commands.Cog):
         embed.set_footer(text="`!목표달성 [번호]`로 완료할 수 있습니다.")
         await ctx.send(embed=embed)
 
-
-
-
-# cogs/growth.py 의 GrowthCog 클래스 내부
-
     @commands.command(name="목표달성")
     async def achieve_goal(self, ctx, goal_number: int):
         """번호가 부여된 목표를 달성 처리합니다."""
@@ -566,27 +561,31 @@ class GrowthCog(commands.Cog):
         achieved_goal = goals.pop(goal_number - 1)
         player_data["goals"] = goals
         
-        # ▼▼▼ 여기가 수정된 부분입니다 ▼▼▼
-        # 확정 보상: 스쿨 포인트 +1
+
         player_data['school_points'] = player_data.get('school_points', 0) + 2
         
-        # 보상 메시지 목록 생성
-        reward_messages = ["\n\n**[ 획득 보상 ]**", "🎓 스쿨 포인트 +2"]
-        
-        # 10% 확률로 스탯 상승
+        reward_list = ["🎓 스쿨 포인트 +2"]
+        stat_up_message = ""
+
         if random.random() < 0.10:
             stat_choice = random.choice(['mental', 'physical'])
             player_data[stat_choice] = player_data.get(stat_choice, 0) + 1
             stat_kor = "정신" if stat_choice == 'mental' else "육체"
-            reward_messages.append(f"✨ **놀라운 성과! {stat_kor} 스탯이 1 상승했습니다!**")
-        
-        save_data(all_data)
-        
-        final_reward_text = "\n".join(reward_messages)
-        await ctx.send(f"🎉 **축하합니다!** '{achieved_goal}' 목표를 달성했습니다!{final_reward_text}")
-        # ▲▲▲ 여기가 수정된 부분입니다 ▲▲▲
+            stat_up_message = f"✨ **놀라운 성과! {stat_kor} 스탯 +1**"
+            reward_list.append(stat_up_message)
 
-# cogs/growth.py 의 GrowthCog 클래스 내부에 추가
+        save_data(all_data)
+
+        # 2. Embed 생성 및 전송
+        embed = discord.Embed(
+            title="🎉 목표 달성!",
+            description=f"**'{achieved_goal}'** 목표를 성공적으로 완수했습니다!",
+            color=int(player_data.get('color', '#FFFFFF')[1:], 16)
+        )
+        embed.add_field(name="[ 획득 보상 ]", value="\n".join(reward_list))
+        
+        await ctx.send(embed=embed)
+   
 
     @commands.command(name="목표중단")
     async def abandon_goal(self, ctx, goal_number: int):
