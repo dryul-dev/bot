@@ -578,7 +578,6 @@ class MonsterCog(commands.Cog):
         
         embed.set_footer(text=f"장착 슬롯: {len(equipped_gear)}/2")
         await ctx.send(embed=embed)
-        await ctx.send(embed=embed)
 
 
 
