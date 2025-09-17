@@ -13,11 +13,25 @@ def load_data():
 def save_data(data):
     with open("player_data.json", 'w', encoding='utf-8') as f: json.dump(data, f, indent=4, ensure_ascii=False)
 
+
+HUNTING_GROUNDS = {
+    "마을 인근": {
+        "monsters": ["슬라임", "고블린", "임프"]
+    },
+    "자작나무 숲": {
+        "monsters": ["성난 늑대", "오염된 정령"]
+    }
+}
+
                     # 드랍 확률이 낮은 재료부터 작성해야 오류가 안 남!!
 MONSTER_DATA = {
     "슬라임": { "attribute": "Heart", "drops": [{"name": "슬라임의 핵", "chance": 0.2}, {"name": "끈적한 점액", "chance": 0.8}] },
     "고블린": { "attribute": "Gut", "drops": [{"name": "낡은 단검", "chance": 0.4}, {"name": "가죽 조각", "chance": 0.6}] },
-    "임프": { "attribute": "Wit", "drops": [{"name": "마력의 가루", "chance": 0.3}, {"name": "작은 날개", "chance": 0.7}] }
+    "임프": { "attribute": "Wit", "drops": [{"name": "마력의 가루", "chance": 0.3}, {"name": "작은 날개", "chance": 0.7}] },
+    
+    # --- 신규 몬스터 (자작나무 숲) ---
+    "성난 늑대": { "attribute": "Gut", "drops": [{"name": "늑대 송곳니", "chance": 0.4}, {"name": "질긴 가죽", "chance": 0.6}] },
+    "오염된 정령": { "attribute": "Wit", "drops": [{"name": "정령의 파편", "chance": 0.3}, {"name": "정령의 마력", "chance": 0.7}] }
 }
 
 
@@ -25,18 +39,25 @@ CRAFTING_RECIPES = {
     # 레시피의 키는 재료 이름들을 알파벳 순으로 정렬한 튜플입니다.
     tuple(sorted(("끈적한 점액", "끈적한 점액"))): "하급 체력 포션",
     tuple(sorted(("가죽 조각", "슬라임의 핵"))): "하급 폭탄",
-    tuple(sorted(("낡은 단검", "작은 날개"))): "하급 수리검"
+    tuple(sorted(("낡은 단검", "작은 날개"))): "하급 수리검",
+    tuple(sorted(("가죽 조각", "마력의 가루"))):"하급 가죽 장갑"
 }
 
 # 시장에서 거래되는 아이템 정보 (구매가/판매가)
 MARKET_ITEMS = {
     "하급 체력 포션": {"buy": 20, "sell": 12},
     "하급 폭탄": {"buy": 30, "sell": 18},
-    "하급 수리검": {"buy": 12, "sell": 8}
+    "하급 수리검": {"buy": 12, "sell": 8},
+    "하급 가죽 장갑": {"buy": 30, "sell": 22}
+
+}
+
+EQUIPMENT_EFFECTS = {
+    "하급 가죽 장갑": {"final_damage_bonus": 1}
 }
 
 class PveBattle:
-    def __init__(self, channel, player_user, active_battles_ref):
+    def __init__(self, channel, player_user, active_battles_ref, hunting_ground_name, monster_name):
 
         
         self.channel = channel
@@ -53,6 +74,8 @@ class PveBattle:
         
         level = 1 + ((player_data.get('mental', 0) + player_data.get('physical', 0)) // 5)
         player_hp = max(1, level * 10 + player_data.get('physical', 0))
+
+
         
         self.player_stats = {
             "id": player_user.id, "name": player_data.get('name', 'Unknown'), 
@@ -60,18 +83,31 @@ class PveBattle:
             "attribute": player_data.get("attribute"), "mental": player_data.get('mental', 0), 
             "physical": player_data.get('physical', 0), "level": level, "hp": player_hp, 
             "current_hp": player_hp, "pve_defense": 0,
-            "color": int(player_data.get('color', '#FFFFFF')[1:], 16), "special_cooldown": 0
+            "color": int(player_data.get('color', '#FFFFFF')[1:], 16), "special_cooldown": 0,
+            "effects": {} # 버프/디버프를 위한 효과 딕셔너리
         }
+
+        equipped_gear = player_data.get("equipped_gear", [])
+        gear_damage_bonus = 0
+        for item in equipped_gear:
+            # EQUIPMENT_EFFECTS 딕셔너리가 이 파일 상단에 정의되어 있어야 합니다.
+            effect = EQUIPMENT_EFFECTS.get(item, {})
+            gear_damage_bonus += effect.get("final_damage_bonus", 0)
 
         monster_name = random.choice(list(MONSTER_DATA.keys()))
         monster_template = MONSTER_DATA[monster_name]
         
         avg_player_damage = (self.player_stats['physical'] + self.player_stats['mental']) / 2 + self.player_stats['level']
-        monster_hp = round(max(10, avg_player_damage * random.uniform(2.5, 3.5)))
 
-        # 공격력: 플레이어 체력을 나누는 값을 늘려서, 몬스터의 공격력을 낮춤
-        monster_ap = round(max(2, self.player_stats['hp'] / random.uniform(5.0, 7.0)))
-
+        if hunting_ground_name == "자작나무 숲":
+            # 자작나무 숲: 약간 더 강함
+            monster_hp = round(max(20, avg_player_damage * random.uniform(3.0, 4.5)))
+            monster_ap = round(max(5, self.player_stats['hp'] / random.uniform(5.0, 7.0)))
+        else:
+            # 기본("마을 인근") 난이도
+            monster_hp = round(max(15, avg_player_damage * random.uniform(2.5, 3.5)))
+            monster_ap = round(max(3, self.player_stats['hp'] / random.uniform(6.0, 8.0)))
+        
         self.monster_stats = {
             "name": monster_name, "level": level, "attribute": monster_template['attribute'], "defense": 0,
             "hp": monster_hp, "current_hp": monster_hp, "ap": monster_ap,
@@ -451,15 +487,36 @@ class MonsterCog(commands.Cog):
         save_data(all_data)
         await ctx.send(f"**{item_name}** 판매를 완료했습니다! (남은 골드: `{player_data['gold']}`G)")
 
+# cogs/monster.py 의 MonsterCog 클래스 내부
 
     @commands.command(name="사냥")
-    async def hunt(self, ctx):
-        if ctx.channel.id in self.active_battles: return await ctx.send("이 채널에서는 이미 다른 활동이 진행중입니다.")
-        battle = PveBattle(ctx.channel, ctx.author, self.active_battles); self.active_battles[ctx.channel.id] = battle
-        embed = discord.Embed(title=f"몬스터 출현! - {battle.monster_stats['name']} (Lv.{battle.monster_stats['level']})", color=0xDC143C); embed.add_field(name=f"{battle.player_stats['name']} (Lv.{battle.player_stats['level']})", value=f"HP: {battle.player_stats['current_hp']}/{battle.player_stats['hp']}", inline=True); 
-        embed.add_field(name=f"{battle.monster_stats['name']}", value=f"HP: {battle.monster_stats['current_hp']}/{battle.monster_stats['hp']}", inline=True); 
-        embed.set_footer(text="당신의 턴입니다. (`!공격`, `!스킬 1`, `!아이템`, `!도망`)"); 
-        await ctx.send(embed=embed); 
+    async def hunt(self, ctx, *, hunting_ground_name: str):
+        """지정한 사냥터에서 몬스터 사냥을 시작합니다."""
+        if ctx.channel.id in self.active_battles:
+            return await ctx.send("이 채널에서는 이미 다른 활동이 진행중입니다.")
+
+        # 입력된 사냥터 이름이 유효한지 확인
+        if hunting_ground_name not in HUNTING_GROUNDS:
+            valid_grounds = ", ".join(f"`{name}`" for name in HUNTING_GROUNDS.keys())
+            return await ctx.send(f"존재하지 않는 사냥터입니다. (선택 가능: {valid_grounds})")
+
+        # 사냥터에 맞는 몬스터 목록에서 랜덤으로 하나 선택
+        monster_list = HUNTING_GROUNDS[hunting_ground_name]["monsters"]
+        monster_to_spawn = random.choice(monster_list)
+
+        # 전투 시작
+        battle = PveBattle(ctx.channel, ctx.author, self.active_battles, hunting_ground_name, monster_to_spawn)
+        self.active_battles[ctx.channel.id] = battle
+
+        embed = discord.Embed(
+            title=f"몬스터 출현! - {battle.monster_stats['name']} (Lv.{battle.monster_stats['level']})",
+            description=f"**[{hunting_ground_name}]**에서 전투가 시작됩니다.",
+            color=0xDC143C
+        )
+        embed.add_field(name=f"{battle.player_stats['name']} (Lv.{battle.player_stats['level']})", value=f"HP: {battle.player_stats['current_hp']}/{battle.player_stats['hp']}", inline=True)
+        embed.add_field(name=f"{battle.monster_stats['name']}", value=f"HP: {battle.monster_stats['current_hp']}/{battle.monster_stats['hp']}", inline=True)
+        embed.set_footer(text="당신의 턴입니다. (`!공격`, `!스킬 1`, `!도망`)")
+        await ctx.send(embed=embed)
         await battle.start_turn_timer()
   
 
@@ -479,6 +536,76 @@ class MonsterCog(commands.Cog):
             await ctx.send("도망에 실패했다! 몬스터가 공격해온다!")
             await asyncio.sleep(1)
             await battle.monster_turn()
+
+# cogs/monster.py 의 MonsterCog 클래스 내부에 추가
+
+    @commands.command(name="장비")
+    async def equipment_info(self, ctx):
+        """현재 장착한 장비를 확인합니다."""
+        all_data = load_data()
+        player_data = all_data.get(str(ctx.author.id), {})
+        equipped_gear = player_data.get("equipped_gear", [])
+
+        embed = discord.Embed(title=f"🛠️ {player_data.get('name', ctx.author.display_name)}의 장비", color=int(player_data.get('color', '#FFFFFF')[1:], 16))
+        
+        if not equipped_gear:
+            embed.description = "장착한 장비가 없습니다."
+        else:
+            for item_name in equipped_gear:
+                effect = EQUIPMENT_EFFECTS.get(item_name, {})
+                effect_str = "효과 없음"
+                if "final_damage_bonus" in effect:
+                    effect_str = f"최종 데미지 +{effect['final_damage_bonus']}"
+                embed.add_field(name=item_name, value=effect_str, inline=False)
+        
+        embed.set_footer(text=f"장착 슬롯: {len(equipped_gear)}/2")
+        await ctx.send(embed=embed)
+
+    @commands.command(name="장착")
+    async def equip_item(self, ctx, *, item_name: str):
+        """아이템 가방에 있는 장비를 장착합니다."""
+        all_data = load_data()
+        player_data = all_data.get(str(ctx.author.id), {})
+        pve_item_bag = player_data.get("pve_item_bag", {})
+        equipped_gear = player_data.get("equipped_gear", [])
+
+        if item_name not in pve_item_bag or pve_item_bag[item_name] <= 0:
+            return await ctx.send(f"'{item_name}' 아이템을 가지고 있지 않습니다.")
+        if item_name not in EQUIPMENT_EFFECTS:
+            return await ctx.send("해당 아이템은 장착할 수 없습니다.")
+        if len(equipped_gear) >= 2:
+            return await ctx.send("장비 슬롯이 가득 찼습니다. (`!장착해제`로 비워주세요)")
+        if item_name in equipped_gear:
+            return await ctx.send("이미 같은 아이템을 장착하고 있습니다.")
+
+        # 가방에서 제거하고 장비에 추가
+        pve_item_bag[item_name] -= 1
+        if pve_item_bag[item_name] == 0:
+            del pve_item_bag[item_name]
+        
+        equipped_gear.append(item_name)
+        player_data["equipped_gear"] = equipped_gear
+        save_data(all_data)
+        await ctx.send(f"✅ **{item_name}**을(를) 장착했습니다.")
+
+    @commands.command(name="장착해제")
+    async def unequip_item(self, ctx, *, item_name: str):
+        """장착한 장비를 해제하여 가방으로 옮깁니다."""
+        all_data = load_data()
+        player_data = all_data.get(str(ctx.author.id), {})
+        equipped_gear = player_data.get("equipped_gear", [])
+
+        if item_name not in equipped_gear:
+            return await ctx.send(f"'{item_name}' 아이템을 장착하고 있지 않습니다.")
+
+        # 장비에서 제거하고 가방에 추가
+        equipped_gear.remove(item_name)
+        pve_item_bag = player_data.get("pve_item_bag", {})
+        pve_item_bag[item_name] = pve_item_bag.get(item_name, 0) + 1
+        
+        player_data["equipped_gear"] = equipped_gear
+        save_data(all_data)
+        await ctx.send(f"☑️ **{item_name}**을(를) 장착 해제했습니다.")
 
 
 # cogs/growth.py의 fix_data_structure 함수 내부

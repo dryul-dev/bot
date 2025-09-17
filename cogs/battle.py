@@ -47,7 +47,25 @@ class Battle:
             hp_buff = level * 5; max_hp += hp_buff
             self.add_log(f"🌙 {base_stats['name']}이(가) 휴식 효과로 최대 체력이 {hp_buff} 증가합니다!")
             all_data[player_id]["rest_buff_active"] = False; save_data(all_data)
-        return {"id": user.id, "name": base_stats['name'], "emoji": base_stats['emoji'], "class": base_stats['class'], "attribute": base_stats.get("attribute"), "advanced_class": base_stats.get("advanced_class"), "defense": 0, "effects": {}, "color": int(base_stats['color'][1:], 16), "mental": base_stats['mental'], "physical": base_stats['physical'], "level": level, "max_hp": max_hp, "current_hp": max_hp, "pos": -1, "special_cooldown": 0, "double_damage_buff": 0}
+
+        
+        return {"id": user.id, 
+                "name": base_stats['name'], 
+                "emoji": base_stats['emoji'], 
+                "class": base_stats['class'], 
+                "attribute": base_stats.get("attribute"), 
+                "advanced_class": base_stats.get("advanced_class"), 
+                "defense": 0, "effects": {}, 
+                "color": int(base_stats['color'][1:], 16), 
+                "mental": base_stats['mental'], 
+                "physical": base_stats['physical'], 
+                "level": level, 
+                "max_hp": max_hp, 
+                "current_hp": max_hp, 
+                "pos": -1, 
+                "special_cooldown": 0, 
+                "double_damage_buff": 0,
+                }
 
     def get_player_stats(self, user):
         return self.p1_stats if user.id == self.p1_user.id else self.p2_stats
