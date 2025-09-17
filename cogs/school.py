@@ -131,7 +131,7 @@ class SchoolCog(commands.Cog):
     async def buy_item(self, ctx, *, item_name_input: str):
         item_name = item_name_input.replace(" ", "") # 입력값의 띄어쓰기 제거
         if item_name not in SHOP_ITEMS:
-            return await ctx.send("상점에서 판매하지 않는 아이템입니다.")
+            return await ctx.send("교내상점에서 판매하지 않는 아이템입니다. (시장의 경우 `!시장구매`)")
         
         all_data = load_data()
         player_data = all_data.get(str(ctx.author.id))
