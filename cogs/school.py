@@ -26,7 +26,7 @@ SHOP_ITEMS = {
     "교내방송 발언권": {"price": 100, "description": "이 정도 가격이면 모범생들만 사용하겠지? 전교생에게 하고 싶은 말을 할 수 있다."},
     "???": {"price": 200, "description": "정체를 알 수 없는 수상한 물약. 마시면 어떻게 될까?"}
 }
-PERMANENT_ITEMS = {"아카데미수건", "인형", "드림캐쳐"}
+PERMANENT_ITEMS = {"아카데미 수건", "인형", "드림캐쳐"}
 ITEM_USAGE_TEXT = {
     "알사탕": "입 안에서 도르륵 굴려본다. 작지만 확실한 행복감이 느껴진다.",
     "꽃송이": "한 송이 꽃을 가만히 바라본다. 은은한 향기가 코 끝을 간지럽힌다.",
@@ -226,6 +226,65 @@ class SchoolCog(commands.Cog):
             save_data(all_data)
             embed.set_footer(text=f"사용한 {item_name} 아이템이 사라졌습니다.")
         await ctx.send(embed=embed)
+
+        # cogs/school.py 의 SchoolCog 클래스 내부에 추가
+
+    @commands.command(name="포인트관리")
+    @commands.is_owner() # 봇 소유자만 실행 가능
+    async def manage_school_points(self, ctx, target_name: str, value_str: str):
+        """[관리자용] 등록된 이름으로 유저의 스쿨 포인트를 관리합니다."""
+        
+        all_data = load_data()
+        
+        # 1. 이름으로 플레이어 찾기
+        target_id = None
+        target_data = None
+        for player_id, player_info in all_data.items():
+            # 이름에 띄어쓰기가 있는 경우를 대비해 따옴표를 제거
+            if player_info.get("name") == target_name.strip('"'):
+                target_id = player_id
+                target_data = player_info
+                break
+        
+        if not target_data:
+            return await ctx.send(f"'{target_name}' 이름을 가진 플레이어를 찾을 수 없습니다.")
+
+        # 2. 값 파싱 (+/- 숫자)
+        try:
+            sign = value_str[0]
+            amount = int(value_str[1:])
+            if sign not in ['+', '-']:
+                raise ValueError
+        except (ValueError, IndexError):
+            return await ctx.send("잘못된 값 형식입니다. `+50`, `-30` 과 같은 형식으로 입력해주세요.")
+
+        # 3. 스쿨 포인트 수정 및 저장
+        original_points = target_data.get('school_points', 0)
+        
+        if sign == '+':
+            new_points = original_points + amount
+        else: # '-'
+            new_points = max(0, original_points - amount) # 포인트가 0 미만이 되지 않도록 보정
+
+        all_data[target_id]['school_points'] = new_points
+        save_data(all_data)
+
+        # 4. 결과 알림
+        embed = discord.Embed(
+            title="🎓 포인트 관리 완료",
+            description=f"**{target_name}**님의 스쿨 포인트를 성공적으로 수정했습니다.",
+            color=discord.Color.green()
+        )
+        embed.add_field(name="대상", value=target_name, inline=True)
+        embed.add_field(name="변경 내용", value=f"`{original_points}` → `{new_points}` ({value_str}P)", inline=False)
+        await ctx.send(embed=embed)
+
+    @manage_school_points.error
+    async def manage_school_points_error(self, ctx, error):
+        if isinstance(error, commands.NotOwner):
+            await ctx.send("이 명령어는 봇 소유자만 사용할 수 있습니다.")
+        elif isinstance(error, commands.MissingRequiredArgument):
+            await ctx.send("사용법: `!포인트관리 [이름] [+혹은-숫자]`\n> 예시: `!포인트관리 홍길동 +100`")
 
 async def setup(bot):
     await bot.add_cog(SchoolCog(bot))
