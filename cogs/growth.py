@@ -691,6 +691,73 @@ class GrowthCog(commands.Cog):
             print(f"!데이터조회 명령어 오류 발생: {error}") # 터미널에 상세 오류 출력
             await ctx.send("명령어 처리 중 알 수 없는 오류가 발생했습니다.")
 
+
+
+    @commands.command(name="성장관리")
+    @commands.is_owner() # 봇 소유자만 실행 가능
+    async def manage_growth(self, ctx, target_name: str, stat_type: str, value_str: str):
+        """[관리자용] 등록된 이름으로 유저의 스탯을 관리합니다."""
+        
+        all_data = load_data()
+        
+        # 1. 이름으로 플레이어 찾기
+        target_id = None
+        target_data = None
+        for player_id, player_info in all_data.items():
+            if player_info.get("name") == target_name:
+                target_id = player_id
+                target_data = player_info
+                break
+        
+        if not target_data:
+            return await ctx.send(f"'{target_name}' 이름을 가진 플레이어를 찾을 수 없습니다.")
+
+        # 2. 스탯 종류 확인
+        stat_map = {"정신": "mental", "육체": "physical"}
+        if stat_type not in stat_map:
+            return await ctx.send("잘못된 스탯 종류입니다. `정신` 또는 `육체` 중에서 선택해주세요.")
+        
+        stat_key = stat_map[stat_type]
+
+        # 3. 값 파싱 (+/- 숫자)
+        try:
+            sign = value_str[0]
+            amount = int(value_str[1:])
+            if sign not in ['+', '-']:
+                raise ValueError
+        except (ValueError, IndexError):
+            return await ctx.send("잘못된 값 형식입니다. `+5`, `-10` 과 같은 형식으로 입력해주세요.")
+
+        # 4. 스탯 수정 및 저장
+        original_stat = target_data.get(stat_key, 0)
+        
+        if sign == '+':
+            new_stat = original_stat + amount
+        else: # '-'
+            new_stat = max(0, original_stat - amount) # 스탯이 0 미만이 되지 않도록 보정
+
+        all_data[target_id][stat_key] = new_stat
+        save_data(all_data)
+
+        # 5. 결과 알림
+        embed = discord.Embed(
+            title="🛠️ 스탯 관리 완료",
+            description=f"**{target_name}**님의 스탯을 성공적으로 수정했습니다.",
+            color=discord.Color.blue()
+        )
+        embed.add_field(name="대상", value=target_name, inline=True)
+        embed.add_field(name="스탯 종류", value=stat_type, inline=True)
+        embed.add_field(name="변경 내용", value=f"`{original_stat}` → `{new_stat}` ({value_str})", inline=False)
+        await ctx.send(embed=embed)
+
+
+    @manage_growth.error
+    async def manage_growth_error(self, ctx, error):
+        if isinstance(error, commands.NotOwner):
+            await ctx.send("이 명령어는 봇 소유자만 사용할 수 있습니다.")
+        elif isinstance(error, commands.MissingRequiredArgument):
+            await ctx.send("사용법: `!성장관리 [이름] [스탯종류] [+혹은-숫자]`\n> 예시: `!성장관리 홍길동 정신 +5`")
+
     
     
 
