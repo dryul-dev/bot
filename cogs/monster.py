@@ -13,10 +13,11 @@ def load_data():
 def save_data(data):
     with open("player_data.json", 'w', encoding='utf-8') as f: json.dump(data, f, indent=4, ensure_ascii=False)
 
+                    # 드랍 확률이 낮은 재료부터 작성해야 오류가 안 남!!
 MONSTER_DATA = {
-    "슬라임": { "attribute": "Heart", "drops": [{"name": "끈적한 점액", "chance": 0.8}, {"name": "슬라임의 핵", "chance": 0.2}] },
-    "고블린": { "attribute": "Gut", "drops": [{"name": "낡은 단검", "chance": 0.5}, {"name": "가죽 조각", "chance": 0.5}] },
-    "임프": { "attribute": "Wit", "drops": [{"name": "작은 날개", "chance": 0.6}, {"name": "마력의 가루", "chance": 0.4}] }
+    "슬라임": { "attribute": "Heart", "drops": [{"name": "슬라임의 핵", "chance": 0.2}, {"name": "끈적한 점액", "chance": 0.8}] },
+    "고블린": { "attribute": "Gut", "drops": [{"name": "낡은 단검", "chance": 0.4}, {"name": "가죽 조각", "chance": 0.6}] },
+    "임프": { "attribute": "Wit", "drops": [{"name": "마력의 가루", "chance": 0.3}, {"name": "작은 날개", "chance": 0.7}] }
 }
 
 
@@ -88,12 +89,34 @@ class PveBattle:
         try:
             await asyncio.sleep(300); await self.end_battle(win=False, reason="사냥 시간이 너무 오래 걸려 집중력을 잃었습니다...")
         except asyncio.CancelledError: pass
+
+
     async def end_battle(self, win, reason=""):
-        if self.turn_timer: self.turn_timer.cancel()
-        if self.channel.id in self.active_battles: del self.active_battles[self.channel.id]
+        if self.turn_timer: 
+            self.turn_timer.cancel()
+        if self.channel.id in self.active_battles: 
+            del self.active_battles[self.channel.id]
+
         if win:
-            gold_won = self.monster_stats['level'] * random.randint(5, 10); 
-            materials_won = [item['name'] for item in self.monster_stats['drops'] if random.random() < item['chance']]
+            gold_won = self.monster_stats['level'] * random.randint(5, 10)
+            
+            # ▼▼▼ 여기가 수정된 부분입니다 ▼▼▼
+            materials_won = []
+            # 1. 0~1 사이의 랜덤 숫자를 하나 뽑습니다.
+            drop_roll = random.random()
+            
+            # 2. 아이템을 드랍 테이블에서 하나씩 확인합니다.
+            for item in self.monster_stats['drops']:
+                # 3. 뽑은 숫자가 아이템의 확률보다 낮으면 당첨!
+                if drop_roll < item['chance']:
+                    materials_won.append(item['name'])
+                    # 4. 하나라도 당첨되면 더 이상 확인하지 않고 멈춥니다.
+                    break 
+            
+            # 만약 모든 아이템의 확률을 뚫고 아무것도 당첨되지 않았다면,
+            # 마지막 아이템을 '꽝' 대신 지급합니다. (선택사항)
+            if not materials_won and self.monster_stats['drops']:
+                 materials_won.append(self.monster_stats['drops'][-1]['name'])
             all_data = load_data(); 
             player_data = all_data.get(str(self.player_user.id))
             if player_data:
