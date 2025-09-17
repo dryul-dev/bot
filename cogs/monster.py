@@ -27,6 +27,13 @@ CRAFTING_RECIPES = {
     tuple(sorted(("낡은 단검", "작은 날개"))): "하급 수리검"
 }
 
+# 시장에서 거래되는 아이템 정보 (구매가/판매가)
+MARKET_ITEMS = {
+    "하급 체력 포션": {"buy": 10, "sell": 8},
+    "하급 폭탄": {"buy": 15, "sell": 12},
+    "하급 수리검": {"buy": 7, "sell": 5}
+}
+
 class PveBattle:
     def __init__(self, channel, player_user, active_battles_ref):
 
@@ -332,6 +339,94 @@ class MonsterCog(commands.Cog):
         save_data(all_data)
 
         await ctx.send(f"✨ **{crafted_item}** 제작에 성공했습니다!")
+
+
+# cogs/monster.py 의 MonsterCog 클래스 내부에 추가
+
+    @commands.command(name="시장")
+    async def market(self, ctx):
+        """시장에서 판매하는 PvE 아이템 목록을 보여줍니다."""
+        embed = discord.Embed(
+            title="🛠️ 시장",
+            description="`!시장구매 [아이템]` 또는 `!시장판매 [아이템]`으로 거래할 수 있습니다.",
+            color=0x00308F
+        )
+        
+        item_list = []
+        for name, prices in MARKET_ITEMS.items():
+            item_list.append(f"- **{name}**: 구매가 `{prices['buy']}`G / 판매가 `{prices['sell']}`G")
+            
+        embed.add_field(name="거래 가능 품목", value="\n".join(item_list), inline=False)
+        embed.set_footer(text="어서 와라, 하룻강아지들아!")
+        await ctx.send(embed=embed)
+
+    @commands.command(name="시장구매")
+    async def market_buy(self, ctx, *, item_name: str):
+        """시장에서 PvE 아이템을 구매합니다."""
+        if item_name not in MARKET_ITEMS:
+            return await ctx.send("시장에서 판매하지 않는 아이템입니다.")
+
+        all_data = load_data()
+        player_data = all_data.get(str(ctx.author.id))
+        if not player_data: return await ctx.send("먼저 `!등록`을 진행해주세요.")
+
+        item_info = MARKET_ITEMS[item_name]
+        gold = player_data.get("gold", 0)
+
+        if gold < item_info['buy']:
+            return await ctx.send("골드가 부족합니다.")
+
+        # 구매 확인
+        await ctx.send(f"**{item_name}**을(를) `{item_info['buy']}`G에 구매하시겠습니까? (30초 안에 `예` 입력)")
+        def check(m): return m.author == ctx.author and m.channel == ctx.channel and m.content.lower() == '예'
+        try:
+            await self.bot.wait_for('message', check=check, timeout=30.0)
+        except asyncio.TimeoutError:
+            return await ctx.send("시간이 초과되어 구매가 취소되었습니다.")
+
+        # 골드 차감 및 아이템 획득
+        player_data['gold'] -= item_info['buy']
+        pve_item_bag = player_data.get("pve_item_bag", {})
+        pve_item_bag[item_name] = pve_item_bag.get(item_name, 0) + 1
+        player_data["pve_item_bag"] = pve_item_bag
+        
+        save_data(all_data)
+        await ctx.send(f"**{item_name}** 구매를 완료했습니다! (남은 골드: `{player_data['gold']}`G)")
+
+    @commands.command(name="시장판매")
+    async def market_sell(self, ctx, *, item_name: str):
+        """보유한 PvE 아이템을 시장에 판매합니다."""
+        if item_name not in MARKET_ITEMS:
+            return await ctx.send("시장에서 취급하지 않는 아이템입니다.")
+
+        all_data = load_data()
+        player_data = all_data.get(str(ctx.author.id))
+        if not player_data: return await ctx.send("먼저 `!등록`을 진행해주세요.")
+
+        pve_item_bag = player_data.get("pve_item_bag", {})
+        if pve_item_bag.get(item_name, 0) <= 0:
+            return await ctx.send(f"'{item_name}' 아이템을 가지고 있지 않습니다.")
+
+        item_info = MARKET_ITEMS[item_name]
+
+        # 판매 확인
+        await ctx.send(f"**{item_name}**을(를) `{item_info['sell']}`G에 판매하시겠습니까? (30초 안에 `예` 입력)")
+        def check(m): return m.author == ctx.author and m.channel == ctx.channel and m.content.lower() == '예'
+        try:
+            await self.bot.wait_for('message', check=check, timeout=30.0)
+        except asyncio.TimeoutError:
+            return await ctx.send("시간이 초과되어 판매가 취소되었습니다.")
+
+        # 아이템 차감 및 골드 획득
+        pve_item_bag[item_name] -= 1
+        if pve_item_bag[item_name] == 0:
+            del pve_item_bag[item_name]
+        
+        player_data['gold'] = player_data.get('gold', 0) + item_info['sell']
+        
+        save_data(all_data)
+        await ctx.send(f"**{item_name}** 판매를 완료했습니다! (남은 골드: `{player_data['gold']}`G)")
+
 
     @commands.command(name="사냥")
     async def hunt(self, ctx):
