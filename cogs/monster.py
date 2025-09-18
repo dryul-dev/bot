@@ -656,88 +656,46 @@ class MonsterCog(commands.Cog):
 
 
 
-
-
-
-
-
-# cogs/growth.py의 fix_data_structure 함수 내부
-    
     @commands.command(name="데이터점검")
     @commands.is_owner()
     async def fix_data_structure(self, ctx):
+        """[관리자용] 모든 유저 데이터의 구조를 최신 상태로 업데이트하고 정리합니다."""
         await ctx.send("모든 유저 데이터 구조 점검 및 업데이트를 시작합니다...")
         
         all_data = load_data()
         updated_users = 0
         
+        # ▼▼▼ KST를 self에서 직접 참조하도록 수정 ▼▼▼
+        today_kst = datetime.now(self.KST).strftime('%Y-%m-%d')
+
         for player_id, player_data in all_data.items():
-            updated = False
+            is_updated_this_loop = False
             
-
-            # pve_inventory가 리스트 형식일 경우 딕셔너리로 변환
+            # --- 각 필드 점검 및 업데이트 ---
             if 'pve_inventory' in player_data and isinstance(player_data['pve_inventory'], list):
-                old_inventory_list = player_data['pve_inventory']
-                new_inventory_dict = {}
-                for item in old_inventory_list:
-                    # 각 아이템의 개수를 세어서 딕셔너리에 저장
-                    new_inventory_dict[item] = new_inventory_dict.get(item, 0) + 1
-                
-                player_data['pve_inventory'] = new_inventory_dict
-                updated = True
-            '''
-            old_name = "하급 가죽 장갑"
-            new_name = "가죽 장갑"
+                old_list = player_data['pve_inventory']
+                new_dict = {}
+                for item in old_list: new_dict[item] = new_dict.get(item, 0) + 1
+                player_data['pve_inventory'] = new_dict
+                is_updated_this_loop = True
 
-            # pve_inventory (재료)
-            if player_data.get('pve_inventory', {}).get(old_name):
-                count = player_data['pve_inventory'][old_name]
-                del player_data['pve_inventory'][old_name]
-                player_data['pve_inventory'][new_name] = count
-            
-            # pve_item_bag (완성품)
-            if player_data.get('pve_item_bag', {}).get(old_name):
-                count = player_data['pve_item_bag'][old_name]
-                del player_data['pve_item_bag'][old_name]
-                player_data['pve_item_bag'][new_name] = count
-
-            # equipped_gear (장착 장비)
-            if old_name in player_data.get('equipped_gear', []):
-                # 리스트의 모든 old_name을 new_name으로 교체
-                player_data['equipped_gear'] = [new_name if item == old_name else item for item in player_data['equipped_gear']]
-            '''
-
-            if 'today_blessing' not in player_data:
-                player_data.setdefault('today_blessing', None)
-                updated = True
-            if 'last_blessing_date' not in player_data:
-                player_data.setdefault('last_blessing_date', None)
-                updated = True
-            if 'goals' not in player_data:
-                player_data.setdefault('goals', [])
-                updated = True
-        
-               
             if 'pve_item_bag' not in player_data:
-                player_data.setdefault('pve_item_bag', {})
-                updated = True
+                player_data['pve_item_bag'] = {}
+                is_updated_this_loop = True
 
             if 'last_goal_date' in player_data and 'daily_goal_info' not in player_data:
-                today_kst = datetime.now(self.KST).strftime('%Y-%m-%d')
                 last_date = player_data['last_goal_date']
-                
-                # 마지막 등록일이 오늘이면 count: 1, 아니면 count: 0
                 count = 1 if last_date == today_kst else 0
                 player_data['daily_goal_info'] = {'date': last_date, 'count': count}
-                
-     
                 del player_data['last_goal_date']
-                updated = True
-
-
+                is_updated_this_loop = True
+            
+            # --- 업데이트된 유저 수 카운트 ---
+            if is_updated_this_loop:
+                updated_users += 1
 
         save_data(all_data)
-        await ctx.send(f"✅ 완료! 총 {len(all_data)}명의 유저 중 {updated_users}명의 데이터 구조를 업데이트했습니다.")  
+        await ctx.send(f"✅ 완료! 총 {len(all_data)}명의 유저 중 {updated_users}명의 데이터 구조를 업데이트했습니다.")
         
 async def setup(bot):
     await bot.add_cog(MonsterCog(bot))
