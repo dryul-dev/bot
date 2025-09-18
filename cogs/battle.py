@@ -605,17 +605,21 @@ class BattleCog(commands.Cog):
         if attacker.get('special_cooldown', 0) > 0: return await ctx.send(f"스킬/특수 능력의 쿨타임이 {attacker['special_cooldown']}턴 남았습니다.", delete_after=10)
 
         # --- PvE 로직 ---
+# cogs/battle.py 의 use_skill 함수 내부
+
+        # [ PvE (몬스터 사냥) 로직 ]
         if battle.battle_type == "pve":
-            if skill_number != 1: return await ctx.send("사냥 중에는 1번 스킬만 사용할 수 있습니다.")
-            advanced_class = attacker['advanced_class']
-            target = attacker if advanced_class in ['힐러', '디펜더'] else battle.monster_stats
+            if skill_number != 1:
+                return await ctx.send("사냥 중에는 1번 스킬만 사용할 수 있습니다.")
             
+            advanced_class = attacker['advanced_class']
+            target = attacker if advanced_class in ['힐러', '디펜더', '그랜터'] else battle.monster_stats
             
             # --- PvE 전용 1번 스킬 효과 적용 ---
             if advanced_class == "캐스터":
                 base_damage = attacker['mental'] + random.randint(0, attacker['physical'])
                 multiplier = 2.0 if random.random() < 0.5 else 1.5
-                final_damage = max(1, round(base_damage * multiplier))
+                final_damage = max(1, round(base_damage * multiplier) - target.get('defense', 0))
                 target['current_hp'] = max(0, target['current_hp'] - final_damage)
                 battle.add_log(f"☄️ {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해!")
             
@@ -627,31 +631,60 @@ class BattleCog(commands.Cog):
             elif advanced_class == "헌터":
                 base_damage = attacker['physical'] + random.randint(0, attacker['mental'])
                 multiplier = 2.0 if random.random() < 0.5 else 1.0
-                final_damage = max(1, round(base_damage * multiplier))
+                final_damage = max(1, round(base_damage * multiplier) - target.get('defense', 0))
                 target['current_hp'] = max(0, target['current_hp'] - final_damage)
                 battle.add_log(f"🔪 {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해!")
                 
             elif advanced_class == "조커":
                 base_damage = attacker['mental'] + random.randint(0, attacker['physical'])
                 bonus_damage = 0
-                if target['attribute'] == 'Gut': # 조커(Wit) > 몬스터(Gut)
+                if target.get('attribute') == 'Gut':
                     bonus_damage = target['level'] * 2
-                    battle.add_log(f"🃏 조커의 속임수! 상성 우위로 추가 데미지 +{bonus_damage}!")
-                final_damage = max(1, round(base_damage) + bonus_damage)
+                    battle.add_log(f"🃏 상성 우위! 추가 데미지 +{bonus_damage}!")
+                final_damage = max(1, round(base_damage) + bonus_damage - target.get('defense', 0))
                 target['current_hp'] = max(0, target['current_hp'] - final_damage)
                 battle.add_log(f"🎯 {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해!")
             
             elif advanced_class == "워리어":
+                self_damage = attacker['level']
+                attacker['current_hp'] = max(1, attacker['current_hp'] - self_damage)
+                battle.add_log(f"🩸 {attacker['name']}이(가) 체력을 {self_damage} 소모합니다!")
                 base_damage = attacker['physical'] + random.randint(0, attacker['mental'])
-                final_damage = max(1, round(base_damage * 2.0))
+                multiplier = 2.0 if random.random() < 0.8 else 1.2
+                if multiplier == 2.0: battle.add_log(f"‼️ 워리어의 강타!")
+                final_damage = max(1, round(base_damage * multiplier) - target.get('defense', 0))
                 target['current_hp'] = max(0, target['current_hp'] - final_damage)
-                battle.add_log(f"⚔️ {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 필살 피해!")
+                battle.add_log(f"⚔️ {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해!")
                 
             elif advanced_class == "디펜더":
                 defense_gain = attacker['level'] * 4
-                attacker['pve_defense'] = attacker.get('pve_defense', 0) + defense_gain # PvE 전용 방어력
+                attacker['pve_defense'] = attacker.get('pve_defense', 0) + defense_gain
                 battle.add_log(f"🛡️ {attacker['name']}이(가) 자신에게 방어도 **{defense_gain}**을 부여합니다!")
+
+            # ▼▼▼ 신규 클래스 스킬 추가 ▼▼▼
+            elif advanced_class == "파이오니어":
+                self_damage = attacker['level']
+                attacker['current_hp'] = max(1, attacker['current_hp'] - self_damage)
+                battle.add_log(f"🩸 {attacker['name']}이(가) 체력을 {self_damage} 소모합니다!")
+                base_damage = attacker['mental'] + random.randint(0, attacker['physical'])
+                multiplier = 2.0 if random.random() < 0.8 else 1.5
+                if multiplier == 2.0: battle.add_log(f"🔥 파이오니어의 마력 폭발!")
+                final_damage = max(1, round(base_damage * multiplier) - target.get('defense', 0))
+                target['current_hp'] = max(0, target['current_hp'] - final_damage)
+                battle.add_log(f"☄️ {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해!")
             
+            elif advanced_class == "그랜터": # 자신에게 버프 부여
+                attacker.setdefault('effects', {})['next_attack_multiplier'] = 1.5
+                battle.add_log(f"✨ {attacker['name']}이(가) 자신에게 힘을 부여합니다! 다음 공격이 1.5배 강화됩니다!")
+
+            elif advanced_class == "커맨더":
+                base_damage = attacker['physical'] + random.randint(0, attacker['mental'])
+                final_damage = max(1, round(base_damage * 1.5) - target.get('defense', 0))
+                target['current_hp'] = max(0, target['current_hp'] - final_damage)
+                battle.add_log(f"📜 {attacker['name']}의 전술 공격! {target['name']}에게 **{final_damage}**의 피해!")
+            # ▲▲▲ 신규 클래스 스킬 추가 ▲▲▲
+            
+            # 스킬 사용 후 공통 처리
             attacker['special_cooldown'] = 2
             
             if battle.monster_stats['current_hp'] <= 0:
