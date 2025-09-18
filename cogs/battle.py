@@ -639,7 +639,7 @@ class BattleCog(commands.Cog):
                 base_damage = attacker['mental'] + random.randint(0, attacker['physical'])
                 bonus_damage = 0
                 if target.get('attribute') == 'Gut':
-                    bonus_damage = target['level'] * 2
+                    bonus_damage = target['level'] * 3
                     battle.add_log(f"🃏 상성 우위! 추가 데미지 +{bonus_damage}!")
                 final_damage = max(1, round(base_damage) + bonus_damage - target.get('defense', 0))
                 target['current_hp'] = max(0, target['current_hp'] - final_damage)
@@ -802,11 +802,11 @@ class BattleCog(commands.Cog):
                 if skill_number == 1:
                     if not (2 <= battle.get_distance(attacker['pos'], target['pos']) <= 3): return await ctx.send("❌ 원거리 공격 사거리가 아닙니다.", delete_after=10)
                     base_damage = attacker['mental'] + random.randint(0, attacker['physical']); bonus_damage = 0
-                    if advantages.get(attacker['attribute']) == target.get('attribute'): bonus_damage = target['level'] * 2; battle.add_log(f"🃏 상성 우위! 추가 데미지 +{bonus_damage}!")
+                    if advantages.get(attacker['attribute']) == target.get('attribute'): bonus_damage = target['level'] * 3; battle.add_log(f"🃏 상성 우위! 추가 데미지 +{bonus_damage}!")
                     final_damage = max(1, round(base_damage) + bonus_damage - target.get('defense', 0)); target['current_hp'] = max(0, target['current_hp'] - final_damage)
                     battle.add_log(f"🎯 {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해!")
                 elif skill_number == 2:
-                    if advantages.get(target.get('attribute')) == attacker.get('attribute'): defense_gain = attacker['level'] * 2; attacker['defense'] += defense_gain; battle.add_log(f"🛡️ 상성 불리 예측! 자신에게 방어도 **{defense_gain}** 부여!")
+                    if advantages.get(target.get('attribute')) == attacker.get('attribute'): defense_gain = attacker['level'] * 3; attacker['defense'] += defense_gain; battle.add_log(f"🛡️ 상성 불리 예측! 자신에게 방어도 **{defense_gain}** 부여!")
                     else: battle.add_log(f"…{attacker['name']}이(가) 스킬을 사용했지만 아무 효과도 없었다.")
                 else: return await ctx.send("잘못된 스킬 번호입니다.", delete_after=10)
 
