@@ -196,6 +196,15 @@ class TeamBattle(Battle):
         next_player_id = self.turn_order[next_turn_index]
         next_p_stats = self.players[next_player_id]
         effects = next_p_stats.get('effects', {})
+
+
+                # 다음 플레이어가 리타이어 상태인지 확인
+        if self.players[next_player_id]['current_hp'] <= 0:
+            # ▼▼▼ 여기가 수정된 부분입니다 ▼▼▼
+            # 여기서 메시지를 출력하지 않고, 바로 다음 턴으로 넘어갑니다.
+            await self.next_turn()
+            return
+
         
         # 지속 회복 효과가 있는지 확인하고 적용
         if 'heal_over_time' in effects:
@@ -509,20 +518,31 @@ class BattleCog(commands.Cog):
         target['current_hp'] = max(0, target['current_hp'] - final_damage)
         battle.add_log(f"💥 {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해를 입혔습니다!")
 
+        # 타겟이 쓰러졌는지 확인
         if target['current_hp'] <= 0:
-            if battle.battle_type == "pve":
-                await battle.end_battle(win=True)
+            battle.add_log(f"{target['name']}이(가) 쓰러졌습니다!")
+            # 팀전일 경우 게임 종료 여부 확인
+            if battle.battle_type == "pvp_team":
+                is_over = await battle.check_game_over()
+                # 게임이 끝나지 않았다면, 상황판만 업데이트하고 행동을 이어감
+                if not is_over:
+                    await battle.display_board()
+            # 1:1 대결일 경우 즉시 종료
             elif battle.battle_type == "pvp_1v1":
                 await battle.end_battle(ctx.author, f"{target['name']}이(가) 공격을 받고 쓰러졌습니다!")
                 if ctx.channel.id in self.active_battles: del self.active_battles[ctx.channel.id]
-            elif battle.battle_type == "pvp_team":
-                if await battle.check_game_over(): 
-                    if ctx.channel.id in self.active_battles: del self.active_battles[ctx.channel.id]
+            
+            # PvE 사냥일 경우 즉시 종료
+            elif battle.battle_type == "pve":
+                await battle.end_battle(win=True)
+
+        # 타겟이 살아있을 경우에만 턴/행동력 처리
         else:
             if battle.battle_type == "pve":
                 await battle.monster_turn()
             else: # PvP
                 await battle.handle_action_cost(1)
+        # ▲▲▲ 여기가 수정된 부분입니다 ▲▲▲
 
 
 
@@ -689,12 +709,6 @@ class BattleCog(commands.Cog):
             # 스킬 사용 후 공통 처리
             attacker['special_cooldown'] = 2
             
-            if battle.monster_stats['current_hp'] <= 0:
-                await battle.end_battle(win=True)
-            else:
-                await battle.monster_turn()
-            return
-
     # --- PvP 로직 ---
         elif battle.battle_type in ["pvp_1v1", "pvp_team"]:
             if not target_user: return await ctx.send("PvP에서는 스킬 대상을 `@멘션`으로 지정해야 합니다.")
@@ -918,12 +932,31 @@ class BattleCog(commands.Cog):
         attacker['special_cooldown'] = 2
         await battle.handle_action_cost(1)
         
-        if battle.battle_type == "pvp_team":
-            if await battle.check_game_over(): del self.active_battles[ctx.channel.id]
-        elif target['current_hp'] <= 0:
-            await battle.end_battle(ctx.author, f"{target['name']}이(가) 스킬에 맞아 쓰러졌습니다!")
-            del self.active_battles[ctx.channel.id]
-        return
+        # 타겟이 쓰러졌는지 확인
+        if target['current_hp'] <= 0:
+            battle.add_log(f"☠️ {target['name']}이(가) 쓰러졌습니다!")
+            # 팀전일 경우 게임 종료 여부 확인
+            if battle.battle_type == "pvp_team":
+                is_over = await battle.check_game_over()
+                # 게임이 끝나지 않았다면, 상황판만 업데이트하고 행동을 이어감
+                if not is_over:
+                    await battle.display_board()
+            # 1:1 대결일 경우 즉시 종료
+            elif battle.battle_type == "pvp_1v1":
+                await battle.end_battle(ctx.author, f"{target['name']}이(가) 공격을 받고 쓰러졌습니다!")
+                if ctx.channel.id in self.active_battles: del self.active_battles[ctx.channel.id]
+            
+            # PvE 사냥일 경우 즉시 종료
+            elif battle.battle_type == "pve":
+                await battle.end_battle(win=True)
+
+        # 타겟이 살아있을 경우에만 턴/행동력 처리
+        else:
+            if battle.battle_type == "pve":
+                await battle.monster_turn()
+            else: # PvP
+                await battle.handle_action_cost(1)
+        # ▲▲▲ 여기가 수정된 부분입니다 ▲▲▲
 
 # cogs/battle.py 의 BattleCog 클래스 내부
 
