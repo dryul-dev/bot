@@ -965,15 +965,20 @@ class BattleCog(commands.Cog):
         await ctx.send(embed=embed)
 
 
+
     @change_advanced_class.error
     async def change_ac_error(self, ctx, error):
         if isinstance(error, commands.NotOwner):
             await ctx.send("이 명령어는 봇 소유자만 사용할 수 있습니다.")
         elif isinstance(error, commands.MissingRequiredArgument):
             await ctx.send("사용법: `!전직변경 [이름] [상위클래스이름]`\n> 예시: `!전직변경 홍길동 캐스터`")
-
-
-
+        # ▼▼▼ 여기가 추가된 부분입니다 ▼▼▼
+        else:
+            # 터미널(screen)에만 자세한 오류 내용을 출력합니다. (디버깅용)
+            print(f"!전직변경 명령어에서 예상치 못한 오류 발생: {error}")
+            # 디스코드 채널에는 간단한 안내 메시지만 보냅니다.
+            await ctx.send("알 수 없는 오류가 발생하여 명령을 처리할 수 없습니다. 봇 소유자에게 문의해주세요.")
+        # ▲▲▲ 여기가 추가된 부분입니다 ▲▲▲
 async def setup(bot):
     await bot.add_cog(BattleCog(bot))
 
