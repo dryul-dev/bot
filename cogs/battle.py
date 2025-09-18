@@ -912,73 +912,7 @@ class BattleCog(commands.Cog):
 
 
 
-    @commands.command(name="전직변경")
-    @commands.is_owner()
-    async def change_advanced_class(self, ctx, target_name: str, *, new_class_name: str):
-        """[관리자용] 등록된 이름으로 유저의 상위 클래스를 강제로 변경하고, 기본 직업도 함께 변경합니다."""
-        
-        all_data = load_data()
-        
-        # 1. 이름으로 플레이어 찾기
-        target_id, target_data = None, None
-        for player_id, player_info in all_data.items():
-            if player_info.get("name") == target_name.strip('"'):
-                target_id = player_id
-                target_data = player_info
-                break
-        
-        if not target_data:
-            return await ctx.send(f"'{target_name}' 이름을 가진 플레이어를 찾을 수 없습니다.")
 
-        # 2. 변경할 상위 클래스가 존재하는지, 그리고 그에 맞는 기본 직업과 속성은 무엇인지 찾기
-        new_base_class, new_attribute = None, None
-        for base_class, options in self.ADVANCED_CLASSES.items():
-            for attr, adv_class in options.items():
-                if adv_class == new_class_name:
-                    new_base_class = base_class
-                    new_attribute = attr
-                    break
-            if new_base_class:
-                break
-        
-        if not new_base_class:
-            return await ctx.send(f"'{new_class_name}'(이)라는 상위 클래스는 존재하지 않습니다.")
-
-        # 3. 데이터 업데이트
-        old_base_class = target_data.get("class", "없음")
-        old_adv_class = target_data.get("advanced_class", "없음")
-        
-        all_data[target_id]["class"] = new_base_class
-        all_data[target_id]["advanced_class"] = new_class_name
-        all_data[target_id]["attribute"] = new_attribute
-        save_data(all_data)
-
-        # 4. 결과 알림
-        embed = discord.Embed(
-            title="✨ 전직 관리 완료 (전체 변경)",
-            description=f"**{target_name}**님의 직업을 성공적으로 변경했습니다.",
-            color=discord.Color.purple()
-        )
-        embed.add_field(name="대상", value=target_name, inline=True)
-        embed.add_field(name="기본 직업 변경", value=f"`{old_base_class}` → `{new_base_class}`", inline=False)
-        embed.add_field(name="상위 클래스 변경", value=f"`{old_adv_class}` → `{new_class_name}` ({new_attribute} 속성)", inline=False)
-        await ctx.send(embed=embed)
-
-
-
-    @change_advanced_class.error
-    async def change_ac_error(self, ctx, error):
-        if isinstance(error, commands.NotOwner):
-            await ctx.send("이 명령어는 봇 소유자만 사용할 수 있습니다.")
-        elif isinstance(error, commands.MissingRequiredArgument):
-            await ctx.send("사용법: `!전직변경 [이름] [상위클래스이름]`\n> 예시: `!전직변경 홍길동 캐스터`")
-        # ▼▼▼ 여기가 추가된 부분입니다 ▼▼▼
-        else:
-            # 터미널(screen)에만 자세한 오류 내용을 출력합니다. (디버깅용)
-            print(f"!전직변경 명령어에서 예상치 못한 오류 발생: {error}")
-            # 디스코드 채널에는 간단한 안내 메시지만 보냅니다.
-            await ctx.send("알 수 없는 오류가 발생하여 명령을 처리할 수 없습니다. 봇 소유자에게 문의해주세요.")
-        # ▲▲▲ 여기가 추가된 부분입니다 ▲▲▲
 async def setup(bot):
     await bot.add_cog(BattleCog(bot))
 
