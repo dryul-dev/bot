@@ -696,14 +696,24 @@ class BattleCog(commands.Cog):
 
 
             elif advanced_class == "파이오니어":
+                distance = battle.get_distance(attacker['pos'], target['pos'])
+                is_melee_range = (distance == 1)
+                is_ranged_range = (2 <= distance <= 3)
+
                 if skill_number == 1: # 체력 소모 후 80% 크리티컬 원거리 공격
-                    if not (2 <= battle.get_distance(attacker['pos'], target['pos']) <= 3): return await ctx.send("❌ 원거리 공격 사거리가 아닙니다.")
-                    self_damage = attacker['level']; attacker['current_hp'] = max(1, attacker['current_hp'] - self_damage); battle.add_log(f"🩸 {attacker['name']}이(가) 체력을 {self_damage} 소모!")
+                    if not is_ranged_range: return await ctx.send("❌ 원거리 공격 사거리가 아닙니다. (2~3칸)")
+                    
+                    self_damage = attacker['level']; attacker['current_hp'] = max(1, attacker['current_hp'] - self_damage)
+                    battle.add_log(f"🩸 {attacker['name']}이(가) 체력을 {self_damage} 소모합니다!")
+
                     base_damage = attacker['mental'] + random.randint(0, attacker['physical'])
                     multiplier = 2.0 if random.random() < 0.8 else 1.5
                     if multiplier == 2.0: battle.add_log(f"🔥 파이오니어의 마력 폭발!")
-                    final_damage = max(1, round(base_damage * multiplier) - target.get('defense', 0)); target['current_hp'] = max(0, target['current_hp'] - final_damage)
+                    
+                    final_damage = max(1, round(base_damage * multiplier) - target.get('defense', 0))
+                    target['current_hp'] = max(0, target['current_hp'] - final_damage)
                     battle.add_log(f"☄️ {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해!")
+                
                 
                 elif skill_number == 2: # 광역 공격
                     if battle.battle_type != "pvp_team": return await ctx.send("이 스킬은 팀 대결에서만 사용할 수 있습니다.")
@@ -723,12 +733,14 @@ class BattleCog(commands.Cog):
                             battle.add_log(f"마력에 휩쓸린 팀원 **{battle.players[hit_teammate_id]['name']}**이(가) 피해!")
 
                 elif skill_number == 3: # 1.5배 근거리 공격
-                    if battle.get_distance(attacker['pos'], target['pos']) != 1: return await ctx.send("❌ 근거리 공격 사거리가 아닙니다.")
+                    if not is_melee_range: return await ctx.send("❌ 근거리 공격 사거리가 아닙니다. (1칸)")
+                    
                     base_damage = attacker['physical'] + random.randint(0, attacker['mental'])
                     final_damage = max(1, round(base_damage * 1.5) - target.get('defense', 0))
                     target['current_hp'] = max(0, target['current_hp'] - final_damage)
                     battle.add_log(f"🔪 {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해!")
-                else: return await ctx.send("잘못된 스킬 번호입니다.")
+                else: 
+                    return await ctx.send("잘못된 스킬 번호입니다.")
 
 
 
