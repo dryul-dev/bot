@@ -93,46 +93,49 @@ class GrowthCog(commands.Cog):
             await ctx.send("시간이 초과되어 등록이 취소되었습니다.")
         
 
+
+
     @commands.command(name="스탯조회")
     async def check_stats(self, ctx, member: discord.Member = None):
         """자신 또는 다른 플레이어의 프로필과 스탯 정보를 확인합니다."""
-        
-        # 멘션된 유저가 없으면, 명령어를 사용한 유저를 대상으로 설정
         target_user = member or ctx.author
-        
-        player_id = str(target_user.id)
         all_data = load_data()
+        player_id = str(target_user.id)
+        player_data = all_data.get(player_id)
 
-        if player_id not in all_data or not all_data[player_id].get("registered", False):
-            await ctx.send(f"**{target_user.display_name}**님은 아직 `!등록`하지 않은 플레이어입니다.")
-            return
-        
-        player_data = all_data[player_id]
+        if not player_data or not player_data.get("registered", False):
+            return await ctx.send(f"**{target_user.display_name}**님은 아직 `!등록`하지 않은 플레이어입니다.")
         
         # 스탯 계산
-        mental = player_data['mental']
-        physical = player_data['physical']
+        mental = player_data.get('mental', 0)
+        physical = player_data.get('physical', 0)
         total_stats = mental + physical
         level = 1 + total_stats // 5
         progress = total_stats % 5
         progress_bar = '■ ' * progress + '□ ' * (5 - progress)
 
+        # ▼▼▼ 여기가 수정된 부분입니다 ▼▼▼
+        # 전직했으면 상위 직업을, 아니면 기본 직업을 표시
+        display_class = player_data.get("advanced_class") or player_data.get("class")
+        # ▲▲▲ 여기가 수정된 부분입니다 ▲▲▲
+
         # Embed 생성
         embed = discord.Embed(
-            title=f"{player_data['name']}님의 프로필 및 스탯 정보",
-            color=int(player_data['color'][1:], 16)
+            title=f"{player_data.get('name', target_user.display_name)}님의 프로필",
+            color=int(player_data.get('color', '#FFFFFF')[1:], 16)
         )
         embed.set_thumbnail(url=target_user.display_avatar.url)
         
         # 프로필 정보 필드
-        embed.add_field(name="칭호", value=player_data['class'], inline=True)
+        embed.add_field(name="직업", value=display_class, inline=True) # 수정된 display_class 변수 사용
         embed.add_field(name="레벨", value=f"**{level}**", inline=True)
-        embed.add_field(name="대표 이모지", value=player_data['emoji'], inline=True)
+        embed.add_field(name="대표 이모지", value=player_data.get('emoji', '❓'), inline=True)
         
         # 스탯 정보 필드
         embed.add_field(name="🧠 정신", value=f"`{mental}`", inline=True)
         embed.add_field(name="💪 육체", value=f"`{physical}`", inline=True)
-        embed.add_field(name="🔥 총 스탯", value=f"`{total_stats}`", inline=True)
+        school_points = player_data.get('school_points', 0)
+        embed.add_field(name="🎓 스쿨 포인트", value=f"`{school_points}`", inline=True)
 
         # 레벨업 진행도 필드
         embed.add_field(
