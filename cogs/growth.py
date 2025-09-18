@@ -26,9 +26,9 @@ class GrowthCog(commands.Cog):
         self.KST = timezone(timedelta(hours=9))
         self.CLASSES = ["마법사", "마검사", "검사"]
         self.ADVANCED_CLASSES = {
-            "마법사": {"Wit": "캐스터", "Heart": "힐러"},
-            "마검사": {"Gut": "헌터", "Wit": "조커"},
-            "검사": {"Gut": "워리어", "Heart": "디펜더"}
+            "마법사": {"Wit": "캐스터", "Heart": "힐러", "Gut": "파이오니어"},
+            "마검사": {"Gut": "헌터", "Wit": "조커", "Heart": "그랜터"},
+            "검사": {"Gut": "워리어", "Heart": "디펜더", "Wit": "커맨더"}
         }
 
     # @bot.command 대신 @commands.command() 를 사용합니다.
