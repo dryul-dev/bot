@@ -443,12 +443,12 @@ class BattleCog(commands.Cog):
 
     @commands.command(name="공격")
     async def attack(self, ctx, target_user: discord.Member = None):
-        battle, current_player_id = await self.get_current_player_and_battle(ctx)
+        battle, _ = await self.get_current_player_and_battle(ctx)
         if not battle: return
 
+        # --- 1. 전투 타입에 따라 공격자와 타겟을 명확히 설정 ---
         attacker, target = None, None
         
-        # --- 1. 공격자 및 타겟 정보 설정 ---
         if battle.battle_type == "pve":
             attacker = battle.player_stats
             target = battle.monster_stats
@@ -473,8 +473,6 @@ class BattleCog(commands.Cog):
         if battle.battle_type == "pve":
             can_attack = True
             attack_type = "근거리" if attacker['class'] == '검사' else ("근거리" if attacker.get('physical', 0) >= attacker.get('mental', 0) else "원거리")
-# cogs/battle.py 의 attack 함수 내부
-
         else: # PvP
             distance = battle.get_distance(attacker['pos'], target['pos'])
             if attacker['class'] == '마법사' and 2 <= distance <= 3: # ◀◀ 이 부분을 수정
@@ -515,35 +513,26 @@ class BattleCog(commands.Cog):
         
         final_damage = max(1, round(base_damage * multiplier) + attribute_damage - target.get('defense', 0))
 
-        target['current_hp'] = max(0, target['current_hp'] - final_damage)
-        battle.add_log(f"💥 {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해를 입혔습니다!")
+        log_message = f"💥 {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해를 입혔습니다!"
+        battle.add_log(log_message)
 
-        # 타겟이 쓰러졌는지 확인
+        if battle.battle_type == "pve":
+            await ctx.send(log_message)
+            await asyncio.sleep(1.5)
+
+        # 전투 종료 또는 턴 전환
         if target['current_hp'] <= 0:
-            battle.add_log(f"{target['name']}이(가) 쓰러졌습니다!")
-            # 팀전일 경우 게임 종료 여부 확인
-            if battle.battle_type == "pvp_team":
-                is_over = await battle.check_game_over()
-                # 게임이 끝나지 않았다면, 상황판만 업데이트하고 행동을 이어감
-                if not is_over:
-                    await battle.display_board()
-            # 1:1 대결일 경우 즉시 종료
+            if battle.battle_type == "pve": await battle.end_battle(win=True)
             elif battle.battle_type == "pvp_1v1":
                 await battle.end_battle(ctx.author, f"{target['name']}이(가) 공격을 받고 쓰러졌습니다!")
                 if ctx.channel.id in self.active_battles: del self.active_battles[ctx.channel.id]
-            
-            # PvE 사냥일 경우 즉시 종료
-            elif battle.battle_type == "pve":
-                await battle.end_battle(win=True)
-
-        # 타겟이 살아있을 경우에만 턴/행동력 처리
+            elif battle.battle_type == "pvp_team":
+                if await battle.check_game_over(): 
+                    if ctx.channel.id in self.active_battles: del self.active_battles[ctx.channel.id]
         else:
-            if battle.battle_type == "pve":
-                await battle.monster_turn()
-            else: # PvP
-                await battle.handle_action_cost(1)
-        # ▲▲▲ 여기가 수정된 부분입니다 ▲▲▲
-
+            if battle.battle_type == "pve": await battle.monster_turn()
+            else: await battle.handle_action_cost(1)
+    
 
 
         
@@ -615,6 +604,7 @@ class BattleCog(commands.Cog):
         battle, current_player_id = await self.get_current_player_and_battle(ctx)
         if not battle: return
 
+        # --- 1. 공통 조건 확인 ---
         attacker = None
         if battle.battle_type == "pve":
             attacker = battle.player_stats
@@ -626,6 +616,7 @@ class BattleCog(commands.Cog):
         if not attacker.get("advanced_class"): return await ctx.send("스킬은 상위 직업으로 전직한 플레이어만 사용할 수 있습니다.")
         if attacker.get('special_cooldown', 0) > 0: return await ctx.send(f"스킬/특수 능력의 쿨타임이 {attacker['special_cooldown']}턴 남았습니다.", delete_after=10)
 
+        advanced_class = attacker['advanced_class']
         # --- PvE 로직 ---
 # cogs/battle.py 의 use_skill 함수 내부
 
@@ -957,18 +948,15 @@ class BattleCog(commands.Cog):
 
             if target['current_hp'] <= 0:
                 battle.add_log(f"☠️ {target['name']}이(가) 쓰러졌습니다!")
-                # 팀전일 경우 게임 종료 여부 확인
                 if battle.battle_type == "pvp_team":
-                    is_over = await battle.check_game_over()
-                    # 게임이 끝나지 않았다면, 상황판만 업데이트하고 행동을 이어감
-                    if not is_over:
-                        await battle.display_board()
-                # 1:1 대결일 경우 즉시 종료
-                elif battle.battle_type == "pvp_1v1":
-                    await battle.end_battle(ctx.author, f"{target['name']}이(가) 공격을 받고 쓰러졌습니다!")
-                    if ctx.channel.id in self.active_battles: del self.active_battles[ctx.channel.id]
-                pass
-            return
+                    if await battle.check_game_over(): 
+                        del self.active_battles[ctx.channel.id]
+                    else:
+                        await battle.display_board() # 게임이 안 끝났으면 상황판만 업데이트
+                else: # pvp_1v1
+                    await battle.end_battle(ctx.author, f"{target['name']}이(가) 스킬을 받고 쓰러졌습니다!")
+                    del self.active_battles[ctx.channel.id]
+            return # PvP 로직 종료
 
 
     @commands.command(name="기권")
