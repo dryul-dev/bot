@@ -509,9 +509,9 @@ class BattleCog(commands.Cog):
         advantages = {'Wit': 'Gut', 'Gut': 'Heart', 'Heart': 'Wit'}
         if attacker.get('attribute') and target.get('attribute'):
             if advantages.get(attacker['attribute']) == target['attribute']:
-                bonus = random.randint(0, attacker['level']); attribute_damage += bonus; battle.add_log(f"👍 상성 우위! +{bonus} 데미지!")
+                bonus = random.randint(0, attacker['level'] * 2); attribute_damage += bonus; battle.add_log(f"👍 상성 우위! +{bonus} 데미지!")
             elif advantages.get(target['attribute']) == attacker['attribute']:
-                penalty = random.randint(0, attacker['level']); attribute_damage -= penalty; battle.add_log(f"👎 상성 열세... -{penalty} 데미지")
+                penalty = random.randint(0, attacker['level'] * 2); attribute_damage -= penalty; battle.add_log(f"👎 상성 열세... -{penalty} 데미지")
         
         final_damage = max(1, round(base_damage * multiplier) + attribute_damage - target.get('defense', 0))
 
@@ -661,7 +661,7 @@ class BattleCog(commands.Cog):
                 base_damage = attacker['mental'] + random.randint(0, attacker['physical'])
                 bonus_damage = 0
                 if target.get('attribute') == 'Gut':
-                    bonus_damage = target['level'] * 3
+                    bonus_damage = target['level'] * 4
                     battle.add_log(f"🃏 상성 우위! 추가 데미지 +{bonus_damage}!")
                 final_damage = max(1, round(base_damage) + bonus_damage - target.get('defense', 0))
                 target['current_hp'] = max(0, target['current_hp'] - final_damage)
@@ -679,7 +679,7 @@ class BattleCog(commands.Cog):
                 battle.add_log(f"⚔️ {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해!")
                 
             elif advanced_class == "디펜더":
-                defense_gain = attacker['level'] * 4
+                defense_gain = attacker['level'] * 6
                 attacker['pve_defense'] = attacker.get('pve_defense', 0) + defense_gain
                 battle.add_log(f"🛡️ {attacker['name']}이(가) 자신에게 방어도 **{defense_gain}**을 부여합니다!")
 
@@ -825,12 +825,21 @@ class BattleCog(commands.Cog):
                 if skill_number == 1:
                     if not (2 <= battle.get_distance(attacker['pos'], target['pos']) <= 3): return await ctx.send("❌ 원거리 공격 사거리가 아닙니다.", delete_after=10)
                     base_damage = attacker['mental'] + random.randint(0, attacker['physical']); bonus_damage = 0
-                    if advantages.get(attacker['attribute']) == target.get('attribute'): bonus_damage = target['level'] * 3; battle.add_log(f"🃏 상성 우위! 추가 데미지 +{bonus_damage}!")
+                    if advantages.get(attacker['attribute']) == target.get('attribute'): bonus_damage = target['level'] * 4; battle.add_log(f"🃏 상성 우위! 추가 데미지 +{bonus_damage}!")
                     final_damage = max(1, round(base_damage) + bonus_damage - target.get('defense', 0)); target['current_hp'] = max(0, target['current_hp'] - final_damage)
                     battle.add_log(f"🎯 {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해!")
                 elif skill_number == 2:
-                    if advantages.get(target.get('attribute')) == attacker.get('attribute'): defense_gain = attacker['level'] * 3; attacker['defense'] += defense_gain; battle.add_log(f"🛡️ 상성 불리 예측! 자신에게 방어도 **{defense_gain}** 부여!")
+                    if advantages.get(target.get('attribute')) == attacker.get('attribute'): defense_gain = attacker['level'] * 4; attacker['defense'] += defense_gain; battle.add_log(f"🛡️ 상성 불리 예측! 자신에게 방어도 **{defense_gain}** 부여!")
                     else: battle.add_log(f"…{attacker['name']}이(가) 스킬을 사용했지만 아무 효과도 없었다.")
+
+                elif skill_number == 3: # 동일 속성 시 다음 턴 행동 횟수 증가
+                    if attacker.get('attribute') == target.get('attribute'):
+                        attacker.setdefault('effects', {})['action_point_modifier'] = 1
+                        battle.add_log(f"🎭 {attacker['name']}이(가) 같은 속성의 상대를 만나 다음 턴에 추가 행동을 얻습니다!")
+                    else:
+                        battle.add_log(f"…{attacker['name']}이(가) 스킬을 사용했지만 아무 효과도 없었다.")
+
+
                 else: return await ctx.send("잘못된 스킬 번호입니다.", delete_after=10)
 
 
