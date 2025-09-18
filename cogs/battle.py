@@ -783,7 +783,7 @@ class BattleCog(commands.Cog):
                         battle.players[enemy_id]['current_hp'] = max(0, battle.players[enemy_id]['current_hp'] - final_damage)
                     battle.add_log(f"☄️ {attacker['name']}이(가) 적군 전체에게 **{final_damage}**의 광역 피해!")
                     
-                    if random.random() < 0.10:
+                    if random.random() < 0.20:
                         teammate_ids = [pid for pid in (battle.team_a_ids if current_player_id in battle.team_a_ids else battle.team_b_ids) if pid != current_player_id]
                         if teammate_ids:
                             hit_teammate_id = random.choice(teammate_ids)
@@ -813,12 +813,18 @@ class BattleCog(commands.Cog):
                     if multiplier == 2.0: battle.add_log(f"💥 헌터의 일격이 치명타로 적중!")
                     final_damage = max(1, round(base_damage * multiplier) - target.get('defense', 0)); target['current_hp'] = max(0, target['current_hp'] - final_damage)
                     battle.add_log(f"🔪 {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해!")
-                elif skill_number == 2:
-                    if not (2 <= battle.get_distance(attacker['pos'], target['pos']) <= 3): return await ctx.send("❌ 원거리 공격 사거리가 아닙니다.", delete_after=10)
+                elif skill_number == 2: # 멀티플라이어 0.5의 사거리 무관 공격 + 방어 초기화
+                    # 사거리 확인 로직을 완전히 제거
+                    
                     base_damage = attacker['mental'] + random.randint(0, attacker['physical'])
-                    final_damage = max(1, round(base_damage) - target.get('defense', 0)); target['current_hp'] = max(0, target['current_hp'] - final_damage); target['defense'] = 0
-                    battle.add_log(f"🏹 {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해를 입히고 방어도를 초기화!")
-                else: return await ctx.send("잘못된 스킬 번호입니다.", delete_after=10)
+                    final_damage = max(1, round(base_damage * 0.5) - target.get('defense', 0)) # 데미지 배율 0.5 적용
+                    
+                    target['current_hp'] = max(0, target['current_hp'] - final_damage)
+                    target['defense'] = 0 # 방어 스택 초기화
+                    battle.add_log(f"🎯 {attacker['name']}이(가) 거리와 상관없이 {target['name']}의 방어를 무력화하고 **{final_damage}**의 피해를 입혔습니다!")
+
+                else: 
+                    return await ctx.send("잘못된 스킬 번호입니다.", delete_after=10)
 
             elif advanced_class == "조커":
                 advantages = {'Wit': 'Gut', 'Gut': 'Heart', 'Heart': 'Wit'}
