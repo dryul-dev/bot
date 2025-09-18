@@ -674,9 +674,7 @@ class MonsterCog(commands.Cog):
         for player_id, player_data in all_data.items():
             updated = False
             
-            # ... (기존 필드 추가 로직) ...
 
-            # ▼▼▼ 여기가 추가된 부분입니다 ▼▼▼
             # pve_inventory가 리스트 형식일 경우 딕셔너리로 변환
             if 'pve_inventory' in player_data and isinstance(player_data['pve_inventory'], list):
                 old_inventory_list = player_data['pve_inventory']
@@ -687,7 +685,7 @@ class MonsterCog(commands.Cog):
                 
                 player_data['pve_inventory'] = new_inventory_dict
                 updated = True
-    
+            '''
             old_name = "하급 가죽 장갑"
             new_name = "가죽 장갑"
 
@@ -707,7 +705,7 @@ class MonsterCog(commands.Cog):
             if old_name in player_data.get('equipped_gear', []):
                 # 리스트의 모든 old_name을 new_name으로 교체
                 player_data['equipped_gear'] = [new_name if item == old_name else item for item in player_data['equipped_gear']]
-
+            '''
 
             if 'today_blessing' not in player_data:
                 player_data.setdefault('today_blessing', None)
@@ -715,13 +713,14 @@ class MonsterCog(commands.Cog):
             if 'last_blessing_date' not in player_data:
                 player_data.setdefault('last_blessing_date', None)
                 updated = True
-
             if 'goals' not in player_data:
                 player_data.setdefault('goals', [])
                 updated = True
+        
                
             if 'pve_item_bag' not in player_data:
                 player_data.setdefault('pve_item_bag', {})
+                updated = True
 
             if 'last_goal_date' in player_data and 'daily_goal_info' not in player_data:
                 today_kst = datetime.now(self.KST).strftime('%Y-%m-%d')
@@ -731,7 +730,7 @@ class MonsterCog(commands.Cog):
                 count = 1 if last_date == today_kst else 0
                 player_data['daily_goal_info'] = {'date': last_date, 'count': count}
                 
-                # 예전 데이터는 삭제하여 깔끔하게 정리
+     
                 del player_data['last_goal_date']
                 updated = True
 
