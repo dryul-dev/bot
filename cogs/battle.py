@@ -168,7 +168,9 @@ class Battle:
         await self.channel.send(embed=embed)
         
     def get_coords(self, pos): return pos // 5, pos % 5
-    def get_distance(self, pos1, pos2): r1, c1 = self.get_coords(pos1); r2, c2 = self.get_coords(pos2); return max(abs(r1 - r2), abs(c1 - c2))
+    def get_distance(self, pos1, pos2):
+        r1, c1 = self.get_coords(pos1); r2, c2 = self.get_coords(pos2)
+        return abs(r1 - r2) + abs(c1 - c2)
 
 # --- 팀 전투 관리 클래스 ---
 class TeamBattle(Battle):
