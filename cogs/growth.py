@@ -478,7 +478,7 @@ class GrowthCog(commands.Cog):
     
     @commands.command(name="목표등록")
     async def register_goal(self, ctx, *, goal_name: str):
-        """오늘의 목표를 등록합니다. (하루에 한 번, 최대 5개)"""
+        """오늘의 목표를 등록합니다. (하루에 2번, 최대 10개)"""
         all_data = load_data()
         player_id = str(ctx.author.id)
         player_data = all_data.get(player_id)
@@ -491,15 +491,23 @@ class GrowthCog(commands.Cog):
             return await ctx.send("목표는 공백 포함 10자 이내로 설정해주세요.")
 
         today_kst = datetime.now(self.KST).strftime('%Y-%m-%d')
-        last_goal_date = player_data.get("last_goal_date")
+        
+        # 날짜와 횟수를 함께 기록하는 'daily_goal_info'를 불러옵니다.
+        daily_goal_info = player_data.get("daily_goal_info", {})
+        last_date = daily_goal_info.get("date")
+        daily_count = daily_goal_info.get("count", 0)
 
-        # 하루에 한 번만 등록 가능
-        if last_goal_date == today_kst:
-            return await ctx.send("목표는 하루에 하나만 등록할 수 있습니다. 내일 다시 시도해주세요.")
+        # 마지막 등록 날짜가 오늘이 아니라면, 횟수를 초기화합니다.
+        if last_date != today_kst:
+            daily_count = 0
 
+        # 하루 등록 제한(2개)을 확인합니다.
+        if daily_count >= 2:
+            return await ctx.send("목표는 하루에 두 번까지만 등록할 수 있습니다. 내일 다시 시도해주세요.")
+        # ▲▲▲ 여기가 수정된 부분입니다 ▲▲...
         goals = player_data.get("goals", [])
-        if len(goals) >= 5:
-            return await ctx.send("최대 5개의 목표만 저장할 수 있습니다. `!목표달성`으로 공간을 확보해주세요.")
+        if len(goals) >= 10:
+            return await ctx.send("최대 10개의 목표만 저장할 수 있습니다. `!목표달성`으로 공간을 확보해주세요.")
 
         goals.append(goal_name)
         player_data["goals"] = goals

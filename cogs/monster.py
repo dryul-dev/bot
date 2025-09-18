@@ -6,6 +6,7 @@ import json
 import os
 import random
 import asyncio
+from datetime import datetime
 
 def load_data():
     if not os.path.exists("player_data.json"): return {}
@@ -718,14 +719,23 @@ class MonsterCog(commands.Cog):
             if 'goals' not in player_data:
                 player_data.setdefault('goals', [])
                 updated = True
-            if 'last_goal_date' not in player_data:
-                player_data.setdefault('last_goal_date', None)
-                updated = True
-
+               
             if 'pve_item_bag' not in player_data:
                 player_data.setdefault('pve_item_bag', {})
+
+            if 'last_goal_date' in player_data and 'daily_goal_info' not in player_data:
+                today_kst = datetime.now(self.KST).strftime('%Y-%m-%d')
+                last_date = player_data['last_goal_date']
+                
+                # 마지막 등록일이 오늘이면 count: 1, 아니면 count: 0
+                count = 1 if last_date == today_kst else 0
+                player_data['daily_goal_info'] = {'date': last_date, 'count': count}
+                
+                # 예전 데이터는 삭제하여 깔끔하게 정리
+                del player_data['last_goal_date']
                 updated = True
-            # ... (임시 데이터 초기화 로직) ...
+
+
 
         save_data(all_data)
         await ctx.send(f"✅ 완료! 총 {len(all_data)}명의 유저 중 {updated_users}명의 데이터 구조를 업데이트했습니다.")  
