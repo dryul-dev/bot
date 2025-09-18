@@ -709,6 +709,13 @@ class BattleCog(commands.Cog):
             # 스킬 사용 후 공통 처리
             attacker['special_cooldown'] = 2
             
+            if battle.monster_stats['current_hp'] <= 0:
+                await battle.end_battle(win=True)
+            else:
+                await battle.monster_turn()
+            
+            return
+            
     # --- PvP 로직 ---
         elif battle.battle_type in ["pvp_1v1", "pvp_team"]:
             if not target_user: return await ctx.send("PvP에서는 스킬 대상을 `@멘션`으로 지정해야 합니다.")
@@ -930,9 +937,9 @@ class BattleCog(commands.Cog):
 
             # --- PvP 스킬 사용 후 공통 처리 ---
         attacker['special_cooldown'] = 2
-        await battle.handle_action_cost(1)
+        await battle.handle_action_cost(1) # PvP에서는 행동력을 1 소모
         
-        # 타겟이 쓰러졌는지 확인
+
         if target['current_hp'] <= 0:
             battle.add_log(f"☠️ {target['name']}이(가) 쓰러졌습니다!")
             # 팀전일 경우 게임 종료 여부 확인
@@ -945,20 +952,9 @@ class BattleCog(commands.Cog):
             elif battle.battle_type == "pvp_1v1":
                 await battle.end_battle(ctx.author, f"{target['name']}이(가) 공격을 받고 쓰러졌습니다!")
                 if ctx.channel.id in self.active_battles: del self.active_battles[ctx.channel.id]
-            
-            # PvE 사냥일 경우 즉시 종료
-            elif battle.battle_type == "pve":
-                await battle.end_battle(win=True)
+            pass
+        return
 
-        # 타겟이 살아있을 경우에만 턴/행동력 처리
-        else:
-            if battle.battle_type == "pve":
-                await battle.monster_turn()
-            else: # PvP
-                await battle.handle_action_cost(1)
-        # ▲▲▲ 여기가 수정된 부분입니다 ▲▲▲
-
-# cogs/battle.py 의 BattleCog 클래스 내부
 
     @commands.command(name="기권")
     async def forfeit(self, ctx):
