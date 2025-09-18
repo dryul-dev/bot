@@ -842,6 +842,49 @@ class GrowthCog(commands.Cog):
         # ▲▲▲ 여기가 추가된 부분입니다 ▲▲▲
 
 
+# cogs/growth.py 의 GrowthCog 클래스 내부
+
+    @commands.command(name="데이터점검")
+    @commands.is_owner()
+    async def fix_data_structure(self, ctx):
+        """[관리자용] 모든 유저 데이터의 구조를 최신 상태로 업데이트하고 정리합니다."""
+        await ctx.send("모든 유저 데이터 구조 점검 및 업데이트를 시작합니다...")
+        
+        all_data = load_data()
+        updated_users = 0
+        
+        # ▼▼▼ KST를 self에서 직접 참조하도록 수정 ▼▼▼
+        today_kst = datetime.now(self.KST).strftime('%Y-%m-%d')
+
+        for player_id, player_data in all_data.items():
+            is_updated_this_loop = False
+            
+            # --- 각 필드 점검 및 업데이트 ---
+            if 'pve_inventory' in player_data and isinstance(player_data['pve_inventory'], list):
+                old_list = player_data['pve_inventory']
+                new_dict = {}
+                for item in old_list: new_dict[item] = new_dict.get(item, 0) + 1
+                player_data['pve_inventory'] = new_dict
+                is_updated_this_loop = True
+
+            if 'pve_item_bag' not in player_data:
+                player_data['pve_item_bag'] = {}
+                is_updated_this_loop = True
+
+            if 'last_goal_date' in player_data and 'daily_goal_info' not in player_data:
+                last_date = player_data['last_goal_date']
+                count = 1 if last_date == today_kst else 0
+                player_data['daily_goal_info'] = {'date': last_date, 'count': count}
+                del player_data['last_goal_date']
+                is_updated_this_loop = True
+            
+            # --- 업데이트된 유저 수 카운트 ---
+            if is_updated_this_loop:
+                updated_users += 1
+
+        save_data(all_data)
+        await ctx.send(f"✅ 완료! 총 {len(all_data)}명의 유저 중 {updated_users}명의 데이터 구조를 업데이트했습니다.")
+
 
 
 # 봇에 Cog를 추가하기 위한 필수 함수
