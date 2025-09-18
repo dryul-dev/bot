@@ -936,24 +936,24 @@ class BattleCog(commands.Cog):
                 else: return await ctx.send("잘못된 스킬 번호입니다.")
 
             # --- PvP 스킬 사용 후 공통 처리 ---
-        attacker['special_cooldown'] = 2
-        await battle.handle_action_cost(1) # PvP에서는 행동력을 1 소모
-        
+            attacker['special_cooldown'] = 2
+            await battle.handle_action_cost(1) # PvP에서는 행동력을 1 소모
+            
 
-        if target['current_hp'] <= 0:
-            battle.add_log(f"☠️ {target['name']}이(가) 쓰러졌습니다!")
-            # 팀전일 경우 게임 종료 여부 확인
-            if battle.battle_type == "pvp_team":
-                is_over = await battle.check_game_over()
-                # 게임이 끝나지 않았다면, 상황판만 업데이트하고 행동을 이어감
-                if not is_over:
-                    await battle.display_board()
-            # 1:1 대결일 경우 즉시 종료
-            elif battle.battle_type == "pvp_1v1":
-                await battle.end_battle(ctx.author, f"{target['name']}이(가) 공격을 받고 쓰러졌습니다!")
-                if ctx.channel.id in self.active_battles: del self.active_battles[ctx.channel.id]
-            pass
-        return
+            if target['current_hp'] <= 0:
+                battle.add_log(f"☠️ {target['name']}이(가) 쓰러졌습니다!")
+                # 팀전일 경우 게임 종료 여부 확인
+                if battle.battle_type == "pvp_team":
+                    is_over = await battle.check_game_over()
+                    # 게임이 끝나지 않았다면, 상황판만 업데이트하고 행동을 이어감
+                    if not is_over:
+                        await battle.display_board()
+                # 1:1 대결일 경우 즉시 종료
+                elif battle.battle_type == "pvp_1v1":
+                    await battle.end_battle(ctx.author, f"{target['name']}이(가) 공격을 받고 쓰러졌습니다!")
+                    if ctx.channel.id in self.active_battles: del self.active_battles[ctx.channel.id]
+                pass
+            return
 
 
     @commands.command(name="기권")
