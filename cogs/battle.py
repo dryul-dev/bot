@@ -487,8 +487,10 @@ class BattleCog(commands.Cog):
             multiplier = attacker_effects.pop('next_attack_multiplier', 1.0); battle.add_log(f"✨ 영창 효과! 데미지가 {multiplier}배 증폭!")
 
         elif attacker.get('double_damage_buff', 0) > 0:
-            multiplier = 2.0; attacker['double_damage_buff'] -= 1
-            battle.add_log(f"✨ 강화된 공격! 데미지가 2배로 적용됩니다! (남은 횟수: {attacker['double_damage_buff']}회)")
+            multiplier = 1.5
+            attacker['double_damage_buff'] -= 1
+            battle.add_log(f"✨ 강화된 공격! 데미지가 1.5배로 적용됩니다! (남은 횟수: {attacker['double_damage_buff']}회)")
+        
         elif random.random() < 0.10: 
             multiplier = 2.0; battle.add_log(f"💥 치명타 발생!")
         else:
@@ -812,9 +814,9 @@ class BattleCog(commands.Cog):
 
 
             elif advanced_class == "그랜터":
-                if skill_number == 1: # 다음 공격 1.5배 부여
-                    target.setdefault('effects', {})['next_attack_multiplier'] = 1.5
-                    battle.add_log(f"✨ {attacker['name']}이(가) {target['name']}에게 힘을 부여! 다음 공격 1.5배 강화!")
+                if skill_number == 1: # 다음 공격 2배 부여
+                    target.setdefault('effects', {})['next_attack_multiplier'] = 2.0
+                    battle.add_log(f"✨ {attacker['name']}이(가) {target['name']}에게 힘을 부여! 다음 공격 2배 강화!")
                 elif skill_number == 2: # 2턴간 체력 회복
                     target.setdefault('effects', {})['heal_over_time'] = {'amount': round(target['max_hp'] / 5), 'duration': 2}
                     battle.add_log(f"💚 {attacker['name']}이(가) {target['name']}에게 지속 회복 효과를 부여!")
