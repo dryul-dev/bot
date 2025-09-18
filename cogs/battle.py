@@ -555,7 +555,7 @@ class BattleCog(commands.Cog):
 
         # 2. PvE 상황에서는 사용 불가 처리
         if battle.battle_type == "pve":
-            return await ctx.send("사냥 중에는 기본 특수 능력을 사용할 수 없습니다. (`!스킬`을 사용해주세요)")
+            return await ctx.send("사냥 중에는 기본 특수 능력을 사용할 수 없습니다. (`!스킬 1`을 사용해주세요)")
 
         # 3. PvP 행동력 및 쿨다운 확인
         if battle.turn_actions_left <= 0:

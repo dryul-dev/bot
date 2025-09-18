@@ -217,21 +217,26 @@ class PveBattle:
             log_message = f"💥 **{monster['name']}**의 강한 공격! **{player['name']}에게 {final_damage}**의 치명적인 피해!"
             if player.get('pve_defense', 0) > 0: player['pve_defense'] = 0
 
-        # 2. 플레이어가 쓰러졌는지 확인
+        await self.channel.send(embed=discord.Embed(description=log_message, color=0xDC143C))
+        
         if player['current_hp'] <= 0:
-            await self.channel.send(embed=discord.Embed(description=log_message, color=0xDC143C))
-            await asyncio.sleep(1)
             await self.end_battle(win=False, reason=f"{monster['name']}의 공격에 쓰러졌습니다...")
             return
 
-        # 3. 모든 결과를 하나의 Embed로 통합하여 전송
+        # ▼▼▼ 여기가 추가된 부분입니다 ▼▼▼
+        # 플레이어 턴으로 전환하기 전에 쿨다운을 1 감소시킵니다.
+        if player.get('special_cooldown', 0) > 0:
+            player['special_cooldown'] -= 1
+        # ▲▲▲ 여기가 추가된 부분입니다 ▲▲▲
+
+        # 플레이어 턴으로 전환 및 타이머 재시작
         self.current_turn = "player"
-        embed = discord.Embed(title="몬스터의 턴 결과", description=log_message, color=player['color'])
+        embed = discord.Embed(title="▶️ 당신의 턴입니다", color=player['color'])
         embed.add_field(name=f"{player['name']}", value=f"HP: {player['current_hp']}/{player['hp']}", inline=True)
         embed.add_field(name=f"{monster['name']}", value=f"HP: {monster['current_hp']}/{monster['hp']}", inline=True)
-        embed.set_footer(text="▶️ 당신의 턴입니다.")
         await self.channel.send(embed=embed)
         
+
         await self.start_turn_timer()
 class MonsterCog(commands.Cog):
     def __init__(self, bot):
