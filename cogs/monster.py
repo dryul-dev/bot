@@ -200,29 +200,30 @@ class PveBattle:
         action_roll = random.random()
         log_message = ""
 
-        # 1. 몬스터 행동 결정 및 데미지/방어 계산
-        if action_roll < 0.6: # 일반 공격 (60%)
+        # 행동 로직이 시작되기 전, 현재 방어도를 미리 저장
+        initial_defense = player.get('pve_defense', 0)
+        
+        if action_roll < 0.6: # 일반 공격
             damage = max(1, monster['ap'] + random.randint(-monster['level'], monster['level']))
-            final_damage = max(0, damage - player.get('pve_defense', 0))
-            defense_consumed = player.get('pve_defense', 0) - max(0, player.get('pve_defense', 0) - damage)
-            player['current_hp'] = max(0, player['current_hp'] - final_damage)
-            player['pve_defense'] = max(0, player.get('pve_defense', 0) - damage)
+            final_damage = max(0, damage - initial_defense)
+            player['pve_defense'] = max(0, initial_defense - damage)
             log_message = f"👹 **{monster['name']}**의 공격! **{player['name']}**에게 **{final_damage}**의 피해!"
-            if defense_consumed > 0: log_message += f" (남은 방어도 {defense_consumed})"
 
-        elif action_roll < 0.9: # 방어 (30%)
+        elif action_roll < 0.9: # 방어
             defense_gain = round(monster['hp'] * 0.2)
             monster['defense'] += defense_gain
             log_message = f"🛡️ **{monster['name']}**이(가) 방어 태세를 갖춥니다! (방어도 +{defense_gain})"
         
-        else: # 강한 공격 (10%)
+        else: # 강한 공격
             damage = max(1, monster['ap'] + random.randint(-monster['level'], monster['level'])) * 2
-            final_damage = max(0, damage - player.get('pve_defense', 0))
-            defense_consumed = player.get('pve_defense', 0) - max(0, player.get('pve_defense', 0) - damage)
-            player['current_hp'] = max(0, player['current_hp'] - final_damage)
-            player['pve_defense'] = max(0, player.get('pve_defense', 0) - damage)
+            final_damage = max(0, damage - initial_defense)
+            player['pve_defense'] = max(0, initial_defense - damage)
             log_message = f"💥 **{monster['name']}**의 강한 공격! **{player['name']}**에게 **{final_damage}**의 치명적인 피해!"
-            if defense_consumed > 0: log_message += f" (남은 방어도 {defense_consumed})"
+
+        # 방어도가 있었던 공격에만 남은 방어도 로그 추가
+        if initial_defense > 0 and (action_roll < 0.6 or action_roll >= 0.9):
+            log_message += f" (방어도 {initial_defense} → {player['pve_defense']})"
+        # ▲▲▲ 여기가 수정된 부분입니다 ▲▲▲
 
         # 2. 플레이어가 쓰러졌는지 확인
         if player['current_hp'] <= 0:
