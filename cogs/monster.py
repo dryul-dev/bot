@@ -190,63 +190,61 @@ class PveBattle:
         else: await self.channel.send(reason if reason else "사냥에 실패했습니다. 보건실에 갑시다.")
 # cogs/monster.py 의 PveBattle 클래스 내부
 
+# cogs/monster.py 의 PveBattle 클래스 내부
+
     async def monster_turn(self):
         """몬스터의 턴을 진행하고, 결과를 하나의 Embed로 통합하여 보여줍니다."""
         monster = self.monster_stats
         player = self.player_stats
         
         action_roll = random.random()
-        log_message = "" # 몬스터가 무슨 행동을 했는지 기록
+        log_message = ""
 
         # 1. 몬스터 행동 결정 및 데미지/방어 계산
-        if action_roll < 0.6: # 일반 공격
+        if action_roll < 0.6: # 일반 공격 (60%)
             damage = max(1, monster['ap'] + random.randint(-monster['level'], monster['level']))
-            final_damage = max(1, damage - player.get('pve_defense', 0))
+            final_damage = max(0, damage - player.get('pve_defense', 0))
+            defense_consumed = player.get('pve_defense', 0) - max(0, player.get('pve_defense', 0) - damage)
             player['current_hp'] = max(0, player['current_hp'] - final_damage)
+            player['pve_defense'] = max(0, player.get('pve_defense', 0) - damage)
             log_message = f"👹 **{monster['name']}**의 공격! **{player['name']}**에게 **{final_damage}**의 피해!"
-            if player.get('pve_defense', 0) > 0: log_message += " (방어함)"; player['pve_defense'] = 0
-        
-        elif action_roll < 0.9: # 방어
+            if defense_consumed > 0: log_message += f" (남은 방어도 {defense_consumed})"
+
+        elif action_roll < 0.9: # 방어 (30%)
             defense_gain = round(monster['hp'] * 0.2)
             monster['defense'] += defense_gain
             log_message = f"🛡️ **{monster['name']}**이(가) 방어 태세를 갖춥니다! (방어도 +{defense_gain})"
         
-        else: # 강한 공격
-            initial_damage = max(1, monster['ap'] + random.randint(-monster['level'], monster['level'])) * 2
-            log_prefix = f"💥 **{monster['name']}**의 강한 공격!"
+        else: # 강한 공격 (10%)
+            damage = max(1, monster['ap'] + random.randint(-monster['level'], monster['level'])) * 2
+            final_damage = max(0, damage - player.get('pve_defense', 0))
+            defense_consumed = player.get('pve_defense', 0) - max(0, player.get('pve_defense', 0) - damage)
+            player['current_hp'] = max(0, player['current_hp'] - final_damage)
+            player['pve_defense'] = max(0, player.get('pve_defense', 0) - damage)
+            log_message = f"💥 **{monster['name']}**의 강한 공격! **{player['name']}**에게 **{final_damage}**의 치명적인 피해!"
+            if defense_consumed > 0: log_message += f" (남은 방어도 {defense_consumed})"
 
-        defense = player.get('pve_defense', 0)
-        
-        # 실제 가해지는 데미지와 남은 방어도 계산
-        damage_dealt = max(0, initial_damage - defense)
-        defense_remaining = max(0, defense - initial_damage)
-        
-        player['current_hp'] = max(0, player['current_hp'] - damage_dealt)
-        player['pve_defense'] = defense_remaining # 소모된 방어도를 반영
-
-        log_message = f"{log_prefix} **{player['name']}**에게 **{damage_dealt}**의 피해!"
-        if defense > 0: # 방어도가 있었을 경우에만 로그 추가
-            log_message += f" (방어도 {defense} → {defense_remaining})"
-
-        await self.channel.send(embed=discord.Embed(description=log_message, color=0xDC143C))
-        
+        # 2. 플레이어가 쓰러졌는지 확인
         if player['current_hp'] <= 0:
+            await self.channel.send(embed=discord.Embed(description=log_message, color=0xDC143C))
+            await asyncio.sleep(1)
             await self.end_battle(win=False, reason=f"{monster['name']}의 공격에 쓰러졌습니다...")
             return
 
+        # 3. 플레이어 턴으로 전환 및 결과 통합 메시지 전송
         if player.get('special_cooldown', 0) > 0:
             player['special_cooldown'] -= 1
-        # ▲▲▲ 여기가 추가된 부분입니다 ▲▲▲
-
-        # 플레이어 턴으로 전환 및 타이머 재시작
+        
         self.current_turn = "player"
-        embed = discord.Embed(title="▶️ 당신의 턴입니다", color=player['color'])
+        embed = discord.Embed(title="몬스터의 턴 결과", description=log_message, color=player['color'])
         embed.add_field(name=f"{player['name']}", value=f"HP: {player['current_hp']}/{player['hp']}", inline=True)
         embed.add_field(name=f"{monster['name']}", value=f"HP: {monster['current_hp']}/{monster['hp']}", inline=True)
+        embed.set_footer(text="▶️ 당신의 턴입니다.")
         await self.channel.send(embed=embed)
         
-
         await self.start_turn_timer()
+
+
 class MonsterCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
