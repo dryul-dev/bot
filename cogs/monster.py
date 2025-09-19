@@ -212,11 +212,21 @@ class PveBattle:
             log_message = f"🛡️ **{monster['name']}**이(가) 방어 태세를 갖춥니다! (방어도 +{defense_gain})"
         
         else: # 강한 공격
-            damage = max(1, monster['ap'] + random.randint(-monster['level'], monster['level'])) * 2
-            final_damage = max(1, damage - player.get('pve_defense', 0))
-            player['current_hp'] = max(0, player['current_hp'] - final_damage)
-            log_message = f"💥 **{monster['name']}**의 강한 공격! **{player['name']}에게 {final_damage}**의 치명적인 피해!"
-            if player.get('pve_defense', 0) > 0: player['pve_defense'] = 0
+            initial_damage = max(1, monster['ap'] + random.randint(-monster['level'], monster['level'])) * 2
+            log_prefix = f"💥 **{monster['name']}**의 강한 공격!"
+
+        defense = player.get('pve_defense', 0)
+        
+        # 실제 가해지는 데미지와 남은 방어도 계산
+        damage_dealt = max(0, initial_damage - defense)
+        defense_remaining = max(0, defense - initial_damage)
+        
+        player['current_hp'] = max(0, player['current_hp'] - damage_dealt)
+        player['pve_defense'] = defense_remaining # 소모된 방어도를 반영
+
+        log_message = f"{log_prefix} **{player['name']}**에게 **{damage_dealt}**의 피해!"
+        if defense > 0: # 방어도가 있었을 경우에만 로그 추가
+            log_message += f" (방어도 {defense} → {defense_remaining})"
 
         await self.channel.send(embed=discord.Embed(description=log_message, color=0xDC143C))
         
@@ -224,8 +234,6 @@ class PveBattle:
             await self.end_battle(win=False, reason=f"{monster['name']}의 공격에 쓰러졌습니다...")
             return
 
-        # ▼▼▼ 여기가 추가된 부분입니다 ▼▼▼
-        # 플레이어 턴으로 전환하기 전에 쿨다운을 1 감소시킵니다.
         if player.get('special_cooldown', 0) > 0:
             player['special_cooldown'] -= 1
         # ▲▲▲ 여기가 추가된 부분입니다 ▲▲▲
