@@ -264,10 +264,26 @@ class BattleCog(commands.Cog):
         self.bot = bot
         self.active_battles = bot.active_battles
 
-    # 헬퍼 함수: 현재 턴인 플레이어와 전투 객체를 가져옵니다.
+# cogs/battle.py 의 BattleCog 클래스 내부
+
     async def get_current_player_and_battle(self, ctx):
-        # ... (이전과 동일한 헬퍼 함수 코드) ...
-        pass
+        """[최종 수정본] 모든 전투 명령어에서 공통으로 사용할 플레이어 및 전투 정보 확인 함수"""
+        battle = self.active_battles.get(ctx.channel.id)
+        if not battle: return None, None
+        
+        current_player_id = None
+        # battle_type 꼬리표로 현재 전투 종류를 명확하게 확인
+        if hasattr(battle, 'battle_type'):
+            if battle.battle_type == "pve":
+                if battle.current_turn != "player": return None, None
+                current_player_id = battle.player_stats['id']
+            elif battle.battle_type in ["pvp_1v1", "pvp_team"]:
+                current_player_id = battle.current_turn_player.id if battle.battle_type == "pvp_1v1" else battle.current_turn_player_id
+        
+        # 명령어 사용자와 현재 턴 플레이어가 일치하는지 최종 확인
+        if not current_player_id or ctx.author.id != current_player_id: return None, None
+        
+        return battle, current_player_id
 
     # --- [핵심] 새로운 데미지 계산 헬퍼 함수 ---
     async def _apply_damage(self, battle, attacker, target, base_damage, base_multiplier=1.0, crit_chance=0.1):
