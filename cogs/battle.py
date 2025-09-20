@@ -310,63 +310,50 @@ class BattleCog(commands.Cog):
 
 
 
-    # --- [핵심] 새로운 데미지 계산 헬퍼 함수 ---
-    async def _apply_damage(self, battle, attacker, target, base_damage, base_multiplier=1.0, crit_chance=0.1):
-        """요청하신 모든 규칙에 따라 데미지를 계산하고 적용하는 중앙 처리 함수"""
+ # cogs/battle.py 의 BattleCog 클래스 내부
+
+    async def _apply_damage(self, battle, attacker, target, base_damage):
+        """[최종 수정본] PvP 데미지 계산 및 적용을 전담하는 함수"""
         
         final_multiplier = 1.0
         log_notes = []
         attacker_effects = attacker.get('effects', {})
 
         # --- 1. 멀티플라이어 우선순위 적용 ---
-        # 최우선: 부여된 고정 배율 (그랜터, 캐스터)
         if 'next_attack_multiplier' in attacker_effects:
             final_multiplier = attacker_effects.pop('next_attack_multiplier')
             log_notes.append(f"✨ 부여 효과({final_multiplier}배)!")
-        
-        # 2순위: 특수 능력 버프 (검사, 마검사)
         elif attacker.get('attack_buff_stacks', 0) > 0:
             final_multiplier = 1.5; attacker['attack_buff_stacks'] -= 1
             log_notes.append(f"✨ 강화된 공격(1.5배)!")
-
-        # 3순위: 스킬 고유 배율 또는 크리티컬
-        else:
-            skill_multiplier = attacker_effects.pop('skill_multiplier', 1.0)
-            crit_chance = attacker_effects.pop('skill_crit_chance', 0.1) # 스킬 고유 크리티컬 확률, 없으면 기본 10%
-            
-            if random.random() < crit_chance:
-                final_multiplier = 2.0
-                log_notes.append(f"💥 치명타({final_multiplier}배)!")
-            elif skill_multiplier > 1.0:
-                final_multiplier = skill_multiplier
-
+        elif random.random() < 0.10:
+            final_multiplier = 2.0
+            log_notes.append(f"💥 치명타(2배)!")
+        
         # --- 2. 상성 계산 ---
         attribute_damage = 0
         advantages = {'Wit': 'Gut', 'Gut': 'Heart', 'Heart': 'Wit'}
         if attacker.get('attribute') and target.get('attribute'):
             if advantages.get(attacker['attribute']) == target['attribute']:
                 bonus = random.randint(0, attacker['level'] * 2); attribute_damage += bonus
-                log_notes.append(f"👍 상성 우위 (+{bonus})")
             elif advantages.get(target['attribute']) == attacker['attribute']:
                 penalty = random.randint(0, attacker['level'] * 2); attribute_damage -= penalty
-                log_notes.append(f"👎 상성 열세 ({penalty})")
-
+        
         # --- 3. 방어 계산 ---
         total_damage = round(base_damage * final_multiplier) + attribute_damage
         defense = target.get('defense', 0)
         final_damage = max(0, total_damage - defense)
         defense_remaining = max(0, defense - total_damage)
         target['defense'] = defense_remaining
-        
-        # --- 4. 최종 데미지 적용 ---
+
+        # --- 4. 최종 데미지 적용 및 로그 생성 ---
         target['current_hp'] = max(0, target['current_hp'] - final_damage)
-        
-        # --- 최종 로그 생성 및 전송 ---
+
         log_message = f"💥 {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해!"
         if log_notes: log_message += " " + " ".join(log_notes)
+        if attribute_damage != 0: log_message += f" (상성 {'+' if attribute_damage > 0 else ''}{attribute_damage})"
         if defense > 0: log_message += f" (방어도 {defense} → {defense_remaining})"
         battle.add_log(log_message)
-
 #============================================================================================================================
 
     @commands.command(name="대결")
