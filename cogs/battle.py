@@ -44,36 +44,17 @@ class Battle:
             hp_buff = level * 5; max_hp += hp_buff
             self.add_log(f"🌙 {base_stats['name']}이(가) 휴식 효과로 최대 체력이 {hp_buff} 증가합니다!")
             all_data[player_id]["rest_buff_active"] = False; save_data(all_data)
-
         
-        return {"id": user.id, 
-                "name": base_stats['name'], 
-                "emoji": base_stats['emoji'], 
-                "class": base_stats['class'], 
-                "attribute": base_stats.get("attribute"), 
-                "advanced_class": base_stats.get("advanced_class"), 
-                "defense": 0, "effects": {}, 
-                "color": int(base_stats['color'][1:], 16), 
-                "mental": base_stats['mental'], 
-                "physical": base_stats['physical'], 
-                "level": level, 
-                "max_hp": max_hp, 
-                "current_hp": max_hp, 
-                "pos": -1, 
-                "special_cooldown": 0, 
-                "double_damage_buff": 0,
-                }
+        equipped_gear = base_stats.get("equipped_gear", [])
+        gear_damage_bonus = 0
+        # PvP에서는 장비 효과가 적용되지 않으므로 이 부분은 비워둡니다.
 
-    def get_player_stats(self, user):
-        return self.p1_stats if user.id == self.p1_user.id else self.p2_stats
+        return {"id": user.id, "name": base_stats['name'], "emoji": base_stats['emoji'], "class": base_stats['class'], "attribute": base_stats.get("attribute"), "advanced_class": base_stats.get("advanced_class"), "defense": 0, "effects": {}, "color": int(base_stats['color'][1:], 16), "mental": base_stats['mental'], "physical": base_stats['physical'], "level": level, "max_hp": max_hp, "current_hp": max_hp, "pos": -1, "special_cooldown": 0, "attack_buff_stacks": 0}
 
-    def get_opponent_stats(self, user):
-        return self.p2_stats if user.id == self.p1_user.id else self.p1_stats
-
-    def add_log(self, message):
-        self.battle_log.append(message)
-        if len(self.battle_log) > 5:
-            self.battle_log.pop(0)
+    def get_player_stats(self, user): return self.p1_stats if user.id == self.p1_user.id else self.p2_stats
+    def get_opponent_stats(self, user): return self.p2_stats if user.id == self.p1_user.id else self.p1_stats
+    def add_log(self, message): self.battle_log.append(message);
+        if len(self.battle_log) > 5: self.battle_log.pop(0)
 
     async def display_board(self, extra_message=""):
         turn_player_stats = self.get_player_stats(self.current_turn_player)
@@ -94,66 +75,39 @@ class Battle:
             await self.display_board("행동력을 모두 소모하여 턴을 종료합니다."); await asyncio.sleep(2); await self.next_turn()
         else: await self.display_board()
 
-# cogs/battle.py 의 Battle 클래스 내부
-
     async def next_turn(self):
-        # ▼▼▼ 지속 효과 처리를 위해 추가된 부분 ▼▼▼
-        # 다음 턴이 될 플레이어 객체를 미리 찾음
+        # 다음 턴 플레이어의 지속 효과 먼저 처리
         next_player_user = self.p2_user if self.current_turn_player.id == self.p1_user.id else self.p1_user
-        next_p_stats = self.get_player_stats(next_player_user)
-        effects = next_p_stats.get('effects', {})
-
-        # 지속 회복 효과가 있는지 확인하고 적용
+        next_p_stats = self.get_player_stats(next_player_user); effects = next_p_stats.get('effects', {})
         if 'heal_over_time' in effects:
-            hot_data = effects['heal_over_time']
-            heal_amount = hot_data['amount']
+            hot_data = effects['heal_over_time']; heal_amount = hot_data['amount']
             next_p_stats['current_hp'] = min(next_p_stats['max_hp'], next_p_stats['current_hp'] + heal_amount)
             self.add_log(f"💚 지속 회복 효과로 {next_p_stats['name']}의 체력이 {heal_amount} 회복되었습니다.")
             hot_data['duration'] -= 1
-            if hot_data['duration'] <= 0:
-                del effects['heal_over_time']
-        # ▲▲▲ 여기까지 추가된 부분 ▲▲▲
-
-        # 기존 턴 넘기는 로직
+            if hot_data['duration'] <= 0: del effects['heal_over_time']
+        
+        # 현재 턴 플레이어의 쿨다운 처리
         p_stats = self.get_player_stats(self.current_turn_player)
         if p_stats.get('special_cooldown', 0) > 0: p_stats['special_cooldown'] -= 1
         
-        self.current_turn_player = next_player_user
-        self.turn_actions_left = 2
-        
-        # 행동 횟수 증감 효과 적용
+        # 턴 전환
+        self.current_turn_player = next_player_user; self.turn_actions_left = 2
         if 'action_point_modifier' in effects:
-            self.turn_actions_left += effects['action_point_modifier']
-            self.add_log(f"⏱️ 효과로 인해 {next_p_stats['name']}의 행동 횟수가 조정됩니다!")
-        next_p_stats['effects'] = {} # 1회성 효과는 여기서 초기화
-
-        self.add_log(f"▶️ {next_p_stats['name']}의 턴입니다.")
-        await self.start_turn_timer()
-        await self.display_board()
-
+            self.turn_actions_left += effects['action_point_modifier']; self.add_log(f"⏱️ 효과로 인해 {next_p_stats['name']}의 행동 횟수가 조정됩니다!")
+        next_p_stats['effects'] = {k: v for k, v in effects.items() if k == 'heal_over_time'} # 지속효과 외 1회성 효과 제거
+        self.add_log(f"▶️ {next_p_stats['name']}의 턴입니다."); await self.start_turn_timer(); await self.display_board()
 
     async def start_turn_timer(self):
         if self.turn_timer: self.turn_timer.cancel()
         self.turn_timer = asyncio.create_task(self.timeout_task())
-
-
     async def timeout_task(self):
         try:
-            await asyncio.sleep(300) # 5분
-            
-            # ▼▼▼ 여기가 수정된 부분입니다 ▼▼▼
-            # 현재 턴 플레이어(패배자)로부터 상대방(승리자)의 '객체'를 찾습니다.
+            await asyncio.sleep(300)
             loser_user = self.current_turn_player
             winner_user = self.p2_user if loser_user.id == self.p1_user.id else self.p1_user
-            
             await self.end_battle(winner_user, f"시간 초과로 {loser_user.display_name}님이 패배했습니다.")
-            # ▲▲▲ 여기가 수정된 부분입니다 ▲▲▲
-            
-            # 전투가 종료되었으므로 active_battles에서 직접 제거
-            if self.channel.id in self.active_battles: 
-                del self.active_battles[self.channel.id]
-        except asyncio.CancelledError: 
-            pass
+            if self.channel.id in self.active_battles: del self.active_battles[self.channel.id]
+        except asyncio.CancelledError: pass
 
     async def end_battle(self, winner_user, reason):
         if self.turn_timer: self.turn_timer.cancel()
@@ -165,45 +119,55 @@ class Battle:
         await self.channel.send(embed=embed)
         
     def get_coords(self, pos): return pos // 5, pos % 5
-    def get_distance(self, pos1, pos2):
-        r1, c1 = self.get_coords(pos1); r2, c2 = self.get_coords(pos2)
-        return abs(r1 - r2) + abs(c1 - c2)
+    def get_distance(self, pos1, pos2): r1, c1 = self.get_coords(pos1); r2, c2 = self.get_coords(pos2); return abs(r1 - r2) + abs(c1 - c2)
 
-# --- 팀 전투 관리 클래스 ---
+# cogs/battle.py 파일 내부
+
+# --- 팀 전투 관리 클래스 (최종본) ---
 class TeamBattle(Battle):
     def __init__(self, channel, team_a_users, team_b_users, active_battles_ref):
-        self.channel = channel; self.active_battles = active_battles_ref; self.players = {}; self.battle_log = ["팀 전투가 시작되었습니다!"]; self.battle_type = "pvp_team"
-        self.team_a_ids = [p.id for p in team_a_users]; self.team_b_ids = [p.id for p in team_b_users]
+        self.channel = channel
+        self.active_battles = active_battles_ref
+        self.players = {} # {id: stats}
+        self.battle_log = ["팀 전투가 시작되었습니다!"]
+        self.battle_type = "pvp_team"
+        
+        self.team_a_ids = [p.id for p in team_a_users]
+        self.team_b_ids = [p.id for p in team_b_users]
+        
         all_data = load_data()
-        for player_user in team_a_users + team_b_users: self.players[player_user.id] = self._setup_player_stats(all_data, player_user)
-        self.players[team_a_users[0].id]['pos'] = 0; self.players[team_a_users[1].id]['pos'] = 10
-        self.players[team_b_users[0].id]['pos'] = 4; self.players[team_b_users[1].id]['pos'] = 14
-        self.grid = ["□"] * 15
-        for p_id, p_stats in self.players.items(): self.grid[p_stats['pos']] = p_stats['emoji']
-        if random.random() < 0.5: self.turn_order = [team_a_users[0].id, team_b_users[0].id, team_a_users[1].id, team_b_users[1].id]; self.add_log("▶️ A팀이 선공입니다!")
-        else: self.turn_order = [team_b_users[0].id, team_a_users[0].id, team_b_users[1].id, team_a_users[1].id]; self.add_log("▶️ B팀이 선공입니다!")
-        self.turn_index = -1; self.current_turn_player_id = None; self.turn_actions_left = 2; self.turn_timer = None
-    
-# cogs/battle.py 의 TeamBattle 클래스 내부
+        for player_user in team_a_users + team_b_users:
+            self.players[player_user.id] = self._setup_player_stats(all_data, player_user)
 
+        self.players[team_a_users[0].id]['pos'] = 0
+        self.players[team_a_users[1].id]['pos'] = 10
+        self.players[team_b_users[0].id]['pos'] = 4
+        self.players[team_b_users[1].id]['pos'] = 14
+        
+        self.grid = ["□"] * 15
+        for p_id, p_stats in self.players.items():
+            self.grid[p_stats['pos']] = p_stats['emoji']
+
+        if random.random() < 0.5:
+            self.turn_order = [team_a_users[0].id, team_b_users[0].id, team_a_users[1].id, team_b_users[1].id]
+            self.add_log("▶️ A팀이 선공입니다!")
+        else:
+            self.turn_order = [team_b_users[0].id, team_a_users[0].id, team_b_users[1].id, team_a_users[1].id]
+            self.add_log("▶️ B팀이 선공입니다!")
+        
+        self.turn_index = -1
+        self.current_turn_player_id = None
+        self.turn_actions_left = 2
+        self.turn_timer = None
+    
     async def next_turn(self):
-        # ▼▼▼ 지속 효과 처리를 위해 추가된 부분 ▼▼▼
-        # 다음 턴 인덱스를 미리 계산하여 다음 플레이어 ID를 찾음
+        # 다음 턴 인덱스 계산
         next_turn_index = (self.turn_index + 1) % 4
         next_player_id = self.turn_order[next_turn_index]
         next_p_stats = self.players[next_player_id]
         effects = next_p_stats.get('effects', {})
-
-
-                # 다음 플레이어가 리타이어 상태인지 확인
-        if self.players[next_player_id]['current_hp'] <= 0:
-            # ▼▼▼ 여기가 수정된 부분입니다 ▼▼▼
-            # 여기서 메시지를 출력하지 않고, 바로 다음 턴으로 넘어갑니다.
-            await self.next_turn()
-            return
-
         
-        # 지속 회복 효과가 있는지 확인하고 적용
+        # 다음 턴 플레이어의 지속 효과 먼저 처리
         if 'heal_over_time' in effects:
             hot_data = effects['heal_over_time']
             heal_amount = hot_data['amount']
@@ -212,63 +176,56 @@ class TeamBattle(Battle):
             hot_data['duration'] -= 1
             if hot_data['duration'] <= 0:
                 del effects['heal_over_time']
-        # ▲▲▲ 여기까지 추가된 부분 ▲▲▲
 
-        # 기존 턴 넘기는 로직
+        # 턴 전환
         self.turn_index = next_turn_index
         
-        if self.players[next_player_id]['current_hp'] <= 0:
-            self.add_log(f"↪️ {self.players[next_player_id]['name']}님은 리타이어하여 턴을 건너뜁니다.")
-            await self.display_board(); await asyncio.sleep(1.5); await self.next_turn(); return
+        # 리타이어한 플레이어 턴 건너뛰기
+        if next_p_stats['current_hp'] <= 0:
+            self.add_log(f"↪️ {next_p_stats['name']}님은 리타이어하여 턴을 건너뜁니다.")
+            await self.display_board()
+            await asyncio.sleep(1.5)
+            await self.next_turn()
+            return
 
         self.current_turn_player_id = next_player_id
         self.turn_actions_left = 2
         
-        # 행동 횟수 증감 효과 적용
         if 'action_point_modifier' in effects:
             self.turn_actions_left += effects['action_point_modifier']
             self.add_log(f"⏱️ 효과로 인해 {next_p_stats['name']}의 행동 횟수가 조정됩니다!")
-        next_p_stats['effects'] = {} # 1회성 효과는 여기서 초기화
         
-        if next_p_stats.get('special_cooldown', 0) > 0: next_p_stats['special_cooldown'] -= 1
+        # 지속 효과 외 1회성 효과 제거
+        next_p_stats['effects'] = {k: v for k, v in effects.items() if k == 'heal_over_time'}
+        
+        if next_p_stats.get('special_cooldown', 0) > 0:
+            next_p_stats['special_cooldown'] -= 1
         
         self.add_log(f"▶️ {next_p_stats['name']}의 턴입니다.")
         await self.start_turn_timer()
         await self.display_board()
-
-
-    async def timeout_task(self):
-        """5분이 지나면 타임아웃으로 패배 처리하는 함수"""
-        try:
-            await asyncio.sleep(300) # 5분
-            
-            # 현재 턴 플레이어(패배자)의 팀을 찾습니다.
-            loser_player_id = self.current_turn_player_id
-            if loser_player_id in self.team_a_ids:
-                winner_team_name, winner_ids = "B팀", self.team_b_ids
-            else:
-                winner_team_name, winner_ids = "A팀", self.team_a_ids
-            
-            loser_name = self.players[loser_player_id]['name']
-            await self.end_battle(winner_team_name, winner_ids, f"시간 초과로 {loser_name}님의 턴이 종료되어 상대팀이 승리했습니다.")
-
-            # 전투가 종료되었으므로 active_battles에서 직접 제거
-            if self.channel.id in self.active_battles: 
-                del self.active_battles[self.channel.id]
-
-        except asyncio.CancelledError:
-            pass # 타이머가 정상적으로 취소된 경우
-            await self.display_board()
 
     async def display_board(self, extra_message=""):
         turn_player_stats = self.players[self.current_turn_player_id]
         embed = discord.Embed(title="⚔️ 팀 대결 진행중 ⚔️", description=f"**현재 턴: {turn_player_stats['name']}**", color=turn_player_stats['color'])
         grid_str = "".join([f" `{cell}` " + ("\n" if (i + 1) % 5 == 0 else "") for i, cell in enumerate(self.grid)])
         embed.add_field(name="[ 전투 맵 ]", value=grid_str, inline=False)
+        
         team_a_leader, team_a_member = self.players[self.team_a_ids[0]], self.players[self.team_a_ids[1]]
         team_b_leader, team_b_member = self.players[self.team_b_ids[0]], self.players[self.team_b_ids[1]]
-        embed.add_field(name=f"A팀: {team_a_leader['name']} & {team_a_member['name']}", value=f"{team_a_leader['emoji']} HP: **{team_a_leader['current_hp']}/{team_a_leader['max_hp']}**\n{team_a_member['emoji']} HP: **{team_a_member['current_hp']}/{team_a_member['max_hp']}**", inline=True)
-        embed.add_field(name=f"B팀: {team_b_leader['name']} & {team_b_member['name']}", value=f"{team_b_leader['emoji']} HP: **{team_b_leader['current_hp']}/{team_b_leader['max_hp']}**\n{team_b_member['emoji']} HP: **{team_b_member['current_hp']}/{team_b_member['max_hp']}**", inline=True)
+        
+        adv_class_a1 = team_a_leader.get('advanced_class') or team_a_leader['class']
+        adv_class_a2 = team_a_member.get('advanced_class') or team_a_member['class']
+        adv_class_b1 = team_b_leader.get('advanced_class') or team_b_leader['class']
+        adv_class_b2 = team_b_member.get('advanced_class') or team_b_member['class']
+
+        embed.add_field(name=f"A팀: {team_a_leader['name']}({adv_class_a1}) & {team_a_member['name']}({adv_class_a2})", 
+                        value=f"{team_a_leader['emoji']} HP: **{team_a_leader['current_hp']}/{team_a_leader['max_hp']}**\n{team_a_member['emoji']} HP: **{team_a_member['current_hp']}/{team_a_member['max_hp']}**", 
+                        inline=True)
+        embed.add_field(name=f"B팀: {team_b_leader['name']}({adv_class_b1}) & {team_b_member['name']}({adv_class_b2})", 
+                        value=f"{team_b_leader['emoji']} HP: **{team_b_leader['current_hp']}/{team_b_leader['max_hp']}**\n{team_b_member['emoji']} HP: **{team_b_member['current_hp']}/{team_b_member['max_hp']}**", 
+                        inline=True)
+        
         embed.add_field(name="남은 행동", value=f"{self.turn_actions_left}회", inline=False)
         embed.add_field(name="📜 전투 로그", value="\n".join(self.battle_log), inline=False)
         if extra_message: embed.set_footer(text=extra_message)
@@ -277,8 +234,12 @@ class TeamBattle(Battle):
     async def check_game_over(self):
         team_a_alive = any(self.players[pid]['current_hp'] > 0 for pid in self.team_a_ids)
         team_b_alive = any(self.players[pid]['current_hp'] > 0 for pid in self.team_b_ids)
-        if not team_a_alive: await self.end_battle("B팀", self.team_b_ids, "A팀이 전멸하여 B팀이 승리했습니다!"); return True
-        if not team_b_alive: await self.end_battle("A팀", self.team_a_ids, "B팀이 전멸하여 A팀이 승리했습니다!"); return True
+        if not team_a_alive:
+            await self.end_battle("B팀", self.team_b_ids, "A팀이 전멸하여 B팀이 승리했습니다!")
+            return True
+        if not team_b_alive:
+            await self.end_battle("A팀", self.team_a_ids, "B팀이 전멸하여 A팀이 승리했습니다!")
+            return True
         return False
     
     async def end_battle(self, winner_team_name, winner_ids, reason):
