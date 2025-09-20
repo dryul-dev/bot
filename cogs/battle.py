@@ -39,7 +39,7 @@ class Battle:
     def _setup_player_stats(self, all_data, user):
         player_id = str(user.id); base_stats = all_data[player_id]
         level = 1 + ((base_stats['mental'] + base_stats['physical']) // 5)
-        max_hp = max(1, level * 10 + base_stats['physical'])
+        max_hp = max(1, level * 10 + base_stats['physical'] * 2)
         if base_stats.get("rest_buff_active", False):
             hp_buff = level * 5; max_hp += hp_buff
             self.add_log(f"🌙 {base_stats['name']}이(가) 휴식 효과로 최대 체력이 {hp_buff} 증가합니다!")
@@ -302,11 +302,12 @@ class BattleCog(commands.Cog):
     async def _apply_damage(self, battle, attacker, target, base_damage, base_multiplier=1.0, crit_chance=0.1):
         """요청하신 모든 규칙에 따라 데미지를 계산하고 적용하는 중앙 처리 함수"""
         
-        final_multiplier = 1.0 # 최종 배율
+        final_multiplier = base_multiplier # 최종 배율
         log_notes = [] # 로그에 추가할 노트
 
         # --- 1. 멀티플라이어 계산 ---
         # 버프 확인 (1.5배)
+ 
         if attacker.get('attack_buff_stacks', 0) > 0:
             final_multiplier = 1.5
             attacker['attack_buff_stacks'] -= 1
@@ -316,9 +317,6 @@ class BattleCog(commands.Cog):
             final_multiplier = 2.0
             log_notes.append(f"💥 치명타 발생! ({final_multiplier}배)")
         
-        # 스킬의 기본 배율이 있다면 그것을 사용
-        if base_multiplier > 1.0:
-            final_multiplier = base_multiplier
 
         # --- 2. 상성 계산 ---
         attribute_damage = 0
@@ -694,7 +692,7 @@ class BattleCog(commands.Cog):
                 else: # pvp_team
                     attacker_team_ids = battle.team_a_ids if attacker['id'] in battle.team_a_ids else battle.team_b_ids
                     if target['id'] not in attacker_team_ids:
-                        return await ctx.send("자신을 포함한 팀원에게만 사용할 수 있습니다.")
+                        return await ctx.send("팀원에게만 사용할 수 있습니다.")
                 # ▲▲▲ 여기가 수정된 부분입니다 ▲▲▲
 
                 # 3. 이하 이동 로직은 기존과 동일
