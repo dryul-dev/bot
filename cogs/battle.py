@@ -53,8 +53,10 @@ class Battle:
 
     def get_player_stats(self, user): return self.p1_stats if user.id == self.p1_user.id else self.p2_stats
     def get_opponent_stats(self, user): return self.p2_stats if user.id == self.p1_user.id else self.p1_stats
-    def add_log(self, message): self.battle_log.append(message);
-        if len(self.battle_log) > 5: self.battle_log.pop(0)
+    def add_log(self, message):
+        self.battle_log.append(message)
+        if len(self.battle_log) > 5:
+            self.battle_log.pop(0)
 
     async def display_board(self, extra_message=""):
         turn_player_stats = self.get_player_stats(self.current_turn_player)
