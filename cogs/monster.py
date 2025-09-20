@@ -433,7 +433,7 @@ class MonsterCog(commands.Cog):
         )
         embed.add_field(name=f"{battle.player_stats['name']} (Lv.{battle.player_stats['level']})", value=f"HP: {battle.player_stats['current_hp']}/{battle.player_stats['hp']}", inline=True)
         embed.add_field(name=f"{battle.monster_stats['name']}", value=f"HP: {battle.monster_stats['current_hp']}/{battle.monster_stats['hp']}", inline=True)
-        embed.set_footer(text="당신의 턴입니다. (`!공격`, `!아이템 [아이템이름]`, `!스킬 1`, `!도망`)")
+        embed.set_footer(text="당신의 턴입니다. (`!공격`, `!아이템 [아이템이름]`, `!도망`)")
         await ctx.send(embed=embed)
         await battle.start_turn_timer()
 

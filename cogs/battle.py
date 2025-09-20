@@ -264,7 +264,6 @@ class BattleCog(commands.Cog):
         self.bot = bot
         self.active_battles = bot.active_battles
 
-# cogs/battle.py 의 BattleCog 클래스 내부
 
     async def get_current_player_and_battle(self, ctx):
         """[최종 수정본] 모든 전투 명령어에서 공통으로 사용할 플레이어 및 전투 정보 확인 함수"""
@@ -463,41 +462,37 @@ class BattleCog(commands.Cog):
 
 
 
+# cogs/battle.py 의 BattleCog 클래스 내부
 
-
-
+    @commands.command(name="공격")
     async def attack(self, ctx, target_user: discord.Member = None):
         battle, _ = await self.get_current_player_and_battle(ctx)
         if not battle: return
+
+        # --- PvE 로직 (헬퍼 함수 미사용) ---
         if battle.battle_type == "pve":
             attacker = battle.player_stats
             target = battle.monster_stats
             attack_type = "근거리" if attacker['class'] == '검사' else ("근거리" if attacker.get('physical', 0) >= attacker.get('mental', 0) else "원거리")
             
+            # PvE는 별도의 간단한 데미지 계산식을 사용
             base_damage = attacker['physical'] + random.randint(0, attacker['mental']) if attack_type == "근거리" else attacker['mental'] + random.randint(0, attacker['physical'])
-            
-            defense = target.get('defense', 0)
-            final_damage = max(0, round(base_damage * 1.0) - defense)
-            defense_remaining = max(0, defense - round(base_damage * 1.0))
-            target['defense'] = defense_remaining
+            final_damage = max(1, round(base_damage) + attacker.get('gear_damage_bonus', 0) - target.get('defense', 0))
             
             target['current_hp'] = max(0, target['current_hp'] - final_damage)
             log_message = f"💥 {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해를 입혔습니다!"
-            if defense > 0:
-                log_message += f" (몬스터 방어도 {defense} → {defense_remaining})"
-            
             battle.add_log(log_message)
-            await ctx.send(log_message)
-            await asyncio.sleep(1.5)
+            await ctx.send(log_message); await asyncio.sleep(1.5)
 
             if target['current_hp'] <= 0:
                 await battle.end_battle(win=True)
             else:
                 await battle.monster_turn()
-            return # PvE 로직 여기서 완전히 종료
+            return
 
-        # --- PvP 로직 ---
+        # --- PvP 로직 (헬퍼 함수 사용) ---
         elif battle.battle_type in ["pvp_1v1", "pvp_team"]:
+            # 1. 공격자, 타겟, 사거리 등 기본 정보 설정
             attacker, target = None, None
             if battle.battle_type == "pvp_1v1":
                 opponent_user = battle.p2_user if ctx.author.id == battle.p1_user.id else battle.p1_user
@@ -512,7 +507,7 @@ class BattleCog(commands.Cog):
                 if not is_opponent: return await ctx.send("❌ 같은 팀원은 공격할 수 없습니다.")
                 attacker = battle.players[ctx.author.id]
                 target = battle.players[target_user.id]
-
+            
             if not attacker or not target: return
 
             distance = battle.get_distance(attacker['pos'], target['pos'])
@@ -523,12 +518,14 @@ class BattleCog(commands.Cog):
             elif attacker['class'] == '검사' and distance == 1: can_attack, attack_type = True, "근거리"
             
             if not can_attack: return await ctx.send("❌ 공격 사거리가 아닙니다.", delete_after=10)
-            
+
+            # 2. 기본 데미지만 계산
             base_damage = attacker['physical'] + random.randint(0, attacker['mental']) if attack_type == "근거리" else attacker['mental'] + random.randint(0, attacker['physical'])
             
-            # 헬퍼 함수 호출
+            # 3. 헬퍼 함수를 호출하여 모든 복잡한 계산 및 데미지 적용 실행
             await self._apply_damage(battle, attacker, target, base_damage)
 
+            # 4. PvP 후속 처리
             if target['current_hp'] <= 0:
                 battle.add_log(f"☠️ {target['name']}이(가) 쓰러졌습니다!")
                 if battle.battle_type == "pvp_team":
@@ -539,8 +536,6 @@ class BattleCog(commands.Cog):
                     del self.active_battles[ctx.channel.id]
             else:
                 await battle.handle_action_cost(1)
-            return # PvP 로직 여기서 완전히 종료
-        
 
 
 #============================================================================================================================
@@ -610,8 +605,6 @@ class BattleCog(commands.Cog):
             return await ctx.send("사냥 중에는 스킬을 사용할 수 없습니다.")
 
         # --- 이하 PvP 전용 로직 ---
-
-        # 1. 공통 조건 확인 (행동력, 전직 여부, 쿨다운)
         if battle.turn_actions_left <= 0: 
             return await ctx.send("행동력이 없습니다.", delete_after=10)
         
@@ -622,7 +615,6 @@ class BattleCog(commands.Cog):
         if attacker.get('special_cooldown', 0) > 0: 
             return await ctx.send(f"스킬/특수 능력의 쿨타임이 {attacker['special_cooldown']}턴 남았습니다.", delete_after=10)
 
-        # 2. 타겟 유효성 검사
         if not target_user: 
             return await ctx.send("PvP에서는 스킬 대상을 `@멘션`으로 지정해야 합니다.")
         
@@ -638,10 +630,6 @@ class BattleCog(commands.Cog):
             return await ctx.send("유효하지 않은 대상입니다.", delete_after=10)
         
         advanced_class = attacker['advanced_class']
-     
-        # --- [이곳에 9개 상위 직업의 elif 스킬 로직을 채워넣으세요] ---
-        
-        # 예시: 워리어(Gut 속성 검사)의 스킬
         if advanced_class == "워리어":
             if skill_number == 1: # 데미지를 주는 스킬
                 if battle.get_distance(attacker['pos'], target['pos']) != 1: return await ctx.send("❌ 근거리 공격 사거리가 아닙니다.")
@@ -866,20 +854,19 @@ class BattleCog(commands.Cog):
 
 
 
-            attacker['special_cooldown'] = 2
-            await battle.handle_action_cost(1)
-            
-            if target['current_hp'] <= 0:
-                battle.add_log(f"☠️ {target['name']}이(가) 쓰러졌습니다!")
-                if battle.battle_type == "pvp_team":
-                    if await battle.check_game_over(): 
-                        del self.active_battles[ctx.channel.id]
-                    else: await battle.display_board()
-                else: # pvp_1v1
-                    await battle.end_battle(ctx.author, f"{target['name']}이(가) 스킬을 받고 쓰러졌습니다!")
+        attacker['special_cooldown'] = 2
+        await battle.handle_action_cost(1)
+        
+        if target['current_hp'] <= 0:
+            battle.add_log(f"☠️ {target['name']}이(가) 쓰러졌습니다!")
+            if battle.battle_type == "pvp_team":
+                if await battle.check_game_over(): 
                     del self.active_battles[ctx.channel.id]
-            return
-
+                else: 
+                    await battle.display_board()
+            else: # pvp_1v1
+                await battle.end_battle(ctx.author, f"{target['name']}이(가) 스킬을 받고 쓰러졌습니다!")
+                del self.active_battles[ctx.channel.id]
 
 
 #============================================================================================================================
