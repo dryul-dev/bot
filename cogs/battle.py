@@ -466,8 +466,6 @@ class BattleCog(commands.Cog):
 
 
 
-    # --- 명령어 뼈대 ---
-
     async def attack(self, ctx, target_user: discord.Member = None):
         battle, _ = await self.get_current_player_and_battle(ctx)
         if not battle: return
