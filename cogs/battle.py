@@ -688,9 +688,9 @@ class BattleCog(commands.Cog):
                     return await ctx.send("이 스킬은 PvP 대결에서만 사용할 수 있습니다.")
 
                 # 2. 타겟 유효성 검사
-                if battle.battle_type == "pvp_1v1":
-                    if target is not attacker: # 1:1에서는 타겟이 자기 자신이어야 함
-                        return await ctx.send("1:1 대결에서는 자기 자신만 이동시킬 수 있습니다. (`!스킬 2 @자신`)")
+                if battle.battle_type != "pvp_team": 
+                    return await ctx.send("이 스킬은 팀 대결에서만 사용할 수 있습니다.")
+                    
                 else: # pvp_team
                     attacker_team_ids = battle.team_a_ids if attacker['id'] in battle.team_a_ids else battle.team_b_ids
                     if target['id'] not in attacker_team_ids:
@@ -703,18 +703,24 @@ class BattleCog(commands.Cog):
                 if not empty_cells: return await ctx.send("이동할 수 있는 빈 칸이 없습니다.")
                 
                 await ctx.send(f"**전술적 재배치**: **{target['name']}**님을 이동시킬 위치의 번호를 입력해주세요.\n> 가능한 위치: `{'`, `'.join(empty_cells)}`")
-                def check(m): return m.author == ctx.author and m.channel == ctx.channel and m.content in empty_cells
-                try:
-                    msg = await self.bot.wait_for('message', check=check, timeout=30.0)
-                    target_pos = int(msg.content) - 1
-                    battle.grid[target['pos']] = "□"; target['pos'] = target_pos; battle.grid[target_pos] = target['emoji']
-                    battle.add_log(f"🧭 {attacker['name']}이(가) {target['name']}을(를) {target_pos + 1}번 위치로 재배치했습니다!")
-                except asyncio.TimeoutError: 
-                    return await ctx.send("시간이 초과되어 취소되었습니다.")
-
-                # 사용자에게 위치 입력받기
-                await ctx.send(f"**전술적 재배치**: **{target['name']}**님을 이동시킬 위치의 번호를 입력해주세요.\n> 가능한 위치: `{'`, `'.join(empty_cells)}`")
-                def check(m): return m.author == ctx.author and m.channel == ctx.channel and m.content.isdigit() and m.content in empty_cells
+                def check(m):
+                        print("\n--- [DEBUG] check 함수 실행 ---")
+                        
+                        cond1 = m.author == ctx.author
+                        print(f"1. 작성자 일치 여부 ({m.author.name} == {ctx.author.name}): {cond1}")
+                        
+                        cond2 = m.channel == ctx.channel
+                        print(f"2. 채널 일치 여부 (#{m.channel.name} == #{ctx.channel.name}): {cond2}")
+                        
+                        # empty_cell_numbers 변수 이름을 다시 한번 확인해주세요.
+                        # 이전 답변에서는 empty_cell_numbers 로 통일했습니다.
+                        cond3 = m.content in empty_cells 
+                        print(f"3. 입력 내용('{m.content}')이 목록에 포함되는지 여부: {cond3}")
+                        print(f"   (비교 대상 목록: {empty_cells})")
+                        
+                        result = cond1 and cond2 and cond3
+                        print(f"--> 최종 결과: {result}")
+                        return result
                 try:
                     msg = await self.bot.wait_for('message', check=check, timeout=30.0)
                     target_pos = int(msg.content) - 1
@@ -781,18 +787,25 @@ class BattleCog(commands.Cog):
                         enemy_target = battle.players[enemy_id]
                         distance_to_enemy = battle.get_distance(attacker['pos'], enemy_target['pos'])
                         if 2 <= distance_to_enemy <= 3:
-                            await self._apply_damage(battle, attacker, enemy_target, base_damage, base_multiplier=1.5)
+                            await self._apply_damage(battle, attacker, enemy_target, base_damage)
                             hit_enemies.append(enemy_target['name'])
                     
                     if not hit_enemies: return await ctx.send("사거리(2~3칸) 안에 있는 적이 없습니다.")
                     battle.add_log(f"☄️ {attacker['name']}이(가) **{', '.join(hit_enemies)}**에게 광역 피해!")
                     
                     if random.random() < 0.20:
-                        # ... (팀원 피격 로직) ...
-                        pass
+                        # 자신을 제외한 팀원 목록을 가져옵니다.
+                        teammate_ids = [pid for pid in (battle.team_a_ids if attacker['id'] in battle.team_a_ids else battle.team_b_ids) if pid != attacker['id']]
+                        if teammate_ids:
+                            hit_teammate_id = random.choice(teammate_ids)
+                            teammate_target = battle.players[hit_teammate_id]
+                            
+                            battle.add_log(f"휩쓸린 마력에 팀원 **{teammate_target['name']}**이(가) 휘말립니다!")
+                            # 팀원에게도 동일한 규칙으로 데미지 적용
+                            await self._apply_damage(battle, attacker, teammate_target, base_damage)
                 
                 else: # 1:1 대결일 경우 (단순 원거리 공격)
-                    await self._apply_damage(battle, attacker, target, base_damage, base_multiplier=1.5)
+                    return await ctx.send("이 스킬은 팀 대결에서만 사용할 수 있습니다.")
             else: 
                 return await ctx.send("잘못된 스킬 번호입니다.")
             
