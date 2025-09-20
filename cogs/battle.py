@@ -93,11 +93,24 @@ class Battle:
         if p_stats.get('special_cooldown', 0) > 0: p_stats['special_cooldown'] -= 1
         
         # 턴 전환
-        self.current_turn_player = next_player_user; self.turn_actions_left = 2
+        self.current_turn_player = next_player_user
+        self.turn_actions_left = 2
+        
+        # 행동 횟수 증감 효과 적용
         if 'action_point_modifier' in effects:
-            self.turn_actions_left += effects['action_point_modifier']; self.add_log(f"⏱️ 효과로 인해 {next_p_stats['name']}의 행동 횟수가 조정됩니다!")
-        next_p_stats['effects'] = {k: v for k, v in effects.items() if k == 'heal_over_time'} # 지속효과 외 1회성 효과 제거
-        self.add_log(f"▶️ {next_p_stats['name']}의 턴입니다."); await self.start_turn_timer(); await self.display_board()
+            self.turn_actions_left += effects['action_point_modifier']
+            self.add_log(f"⏱️ 효과로 인해 {next_p_stats['name']}의 행동 횟수가 조정됩니다!")
+
+        # ▼▼▼ 여기가 수정된 부분입니다 ▼▼▼
+        # 지속되어야 하는 효과 목록
+        persistent_effects = ['heal_over_time', 'next_attack_multiplier']
+        # 지속 효과를 제외한 1회성 효과만 제거
+        next_p_stats['effects'] = {k: v for k, v in effects.items() if k in persistent_effects}
+        # ▲▲▲ 여기가 수정된 부분입니다 ▲▲▲
+
+        self.add_log(f"▶️ {next_p_stats['name']}의 턴입니다.")
+        await self.start_turn_timer()
+        await self.display_board()
 
     async def start_turn_timer(self):
         if self.turn_timer: self.turn_timer.cancel()
@@ -197,11 +210,12 @@ class TeamBattle(Battle):
             self.turn_actions_left += effects['action_point_modifier']
             self.add_log(f"⏱️ 효과로 인해 {next_p_stats['name']}의 행동 횟수가 조정됩니다!")
         
-        # 지속 효과 외 1회성 효과 제거
-        next_p_stats['effects'] = {k: v for k, v in effects.items() if k == 'heal_over_time'}
+        # ▼▼▼ 여기가 수정된 부분입니다 ▼▼▼
+        persistent_effects = ['heal_over_time', 'next_attack_multiplier']
+        next_p_stats['effects'] = {k: v for k, v in effects.items() if k in persistent_effects}
+        # ▲▲▲ 여기가 수정된 부분입니다 ▲▲▲
         
-        if next_p_stats.get('special_cooldown', 0) > 0:
-            next_p_stats['special_cooldown'] -= 1
+        if next_p_stats.get('special_cooldown', 0) > 0: next_p_stats['special_cooldown'] -= 1
         
         self.add_log(f"▶️ {next_p_stats['name']}의 턴입니다.")
         await self.start_turn_timer()
