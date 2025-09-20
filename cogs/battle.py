@@ -649,7 +649,7 @@ class BattleCog(commands.Cog):
 
 
         elif advanced_class == "디펜더":
-            if skill_number == 1: defense_gain = attacker['level'] * 6; target['defense'] += defense_gain; battle.add_log(f"🛡️ {attacker['name']}이(가) {target['name']}에게 방어도 **{defense_gain}** 부여!")
+            if skill_number == 1: defense_gain = attacker['level'] * 5; target['defense'] += defense_gain; battle.add_log(f"🛡️ {attacker['name']}이(가) {target['name']}에게 방어도 **{defense_gain}** 부여!")
             elif skill_number == 2: target.setdefault('effects', {})['action_point_modifier'] = 1; battle.add_log(f"🏃 {attacker['name']}이(가) {target['name']}의 다음 턴 행동 횟수를 1회 증가!")
             else: return await ctx.send("잘못된 스킬 번호입니다.", delete_after=10)
 
@@ -661,7 +661,7 @@ class BattleCog(commands.Cog):
                 base_damage = attacker['physical'] + random.randint(0, attacker['mental'])
 
                 # 2. 1.5의 배율을 헬퍼 함수에 전달하여 모든 계산을 맡김
-                await self._apply_pvp_damage(battle, attacker, target, base_damage, base_multiplier=1.5)
+                await self._apply_damage(battle, attacker, target, base_damage, base_multiplier=1.5)
                         
             elif skill_number == 2: # 팀원 이동
                 if battle.battle_type != "pvp_team":
@@ -671,8 +671,6 @@ class BattleCog(commands.Cog):
                 attacker_team_ids = battle.team_a_ids if attacker['id'] in battle.team_a_ids else battle.team_b_ids
                 if target['id'] not in attacker_team_ids:
                     return await ctx.send("자신의 팀원에게만 사용할 수 있습니다.")
-                if target['id'] == attacker['id']:
-                    return await ctx.send("자기 자신은 이동시킬 수 없습니다.")
 
                 # 이동 가능한 빈 칸 목록 생성
                 occupied_positions = [p['pos'] for p in battle.players.values()]
@@ -803,10 +801,6 @@ class BattleCog(commands.Cog):
                 battle.add_log(f"🛡️ {target['name']}의 방어도가 초기화되었습니다!")
             else: 
                 return await ctx.send("잘못된 스킬 번호입니다.", delete_after=10)
-
-
-
-# cogs/battle.py 의 use_skill 함수, PvP 로직 내부
 
         elif advanced_class == "조커":
             distance = battle.get_distance(attacker['pos'], target['pos'])
