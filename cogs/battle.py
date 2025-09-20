@@ -298,25 +298,37 @@ class BattleCog(commands.Cog):
         
         return battle, current_player_id
 
+
+
     # --- [핵심] 새로운 데미지 계산 헬퍼 함수 ---
     async def _apply_damage(self, battle, attacker, target, base_damage, base_multiplier=1.0, crit_chance=0.1):
         """요청하신 모든 규칙에 따라 데미지를 계산하고 적용하는 중앙 처리 함수"""
         
-        final_multiplier = base_multiplier # 최종 배율
-        log_notes = [] # 로그에 추가할 노트
+        final_multiplier = 1.0
+        log_notes = []
+        attacker_effects = attacker.get('effects', {})
 
-        # --- 1. 멀티플라이어 계산 ---
-        # 버프 확인 (1.5배)
- 
-        if attacker.get('attack_buff_stacks', 0) > 0:
-            final_multiplier = 1.5
-            attacker['attack_buff_stacks'] -= 1
-            log_notes.append(f"✨ 강화된 공격! ({final_multiplier}배)")
-        # 크리티컬 확인 (2배)
-        elif random.random() < crit_chance:
-            final_multiplier = 2.0
-            log_notes.append(f"💥 치명타 발생! ({final_multiplier}배)")
+        # --- 1. 멀티플라이어 우선순위 적용 ---
+        # 최우선: 부여된 고정 배율 (그랜터, 캐스터)
+        if 'next_attack_multiplier' in attacker_effects:
+            final_multiplier = attacker_effects.pop('next_attack_multiplier')
+            log_notes.append(f"✨ 부여 효과({final_multiplier}배)!")
         
+        # 2순위: 특수 능력 버프 (검사, 마검사)
+        elif attacker.get('attack_buff_stacks', 0) > 0:
+            final_multiplier = 1.5; attacker['attack_buff_stacks'] -= 1
+            log_notes.append(f"✨ 강화된 공격(1.5배)!")
+
+        # 3순위: 스킬 고유 배율 또는 크리티컬
+        else:
+            skill_multiplier = attacker_effects.pop('skill_multiplier', 1.0)
+            crit_chance = attacker_effects.pop('skill_crit_chance', 0.1) # 스킬 고유 크리티컬 확률, 없으면 기본 10%
+            
+            if random.random() < crit_chance:
+                final_multiplier = 2.0
+                log_notes.append(f"💥 치명타({final_multiplier}배)!")
+            elif skill_multiplier > 1.0:
+                final_multiplier = skill_multiplier
 
         # --- 2. 상성 계산 ---
         attribute_damage = 0
@@ -654,8 +666,8 @@ class BattleCog(commands.Cog):
                 attacker['current_hp'] = max(1, attacker['current_hp'] - self_damage)
                 battle.add_log(f"🩸 {attacker['name']}이(가) 체력을 {self_damage} 소모합니다!")
 
-                base_damage = attacker['physical'] + random.randint(0, attacker['mental'])
-                # 80% 크리티컬 확률을 헬퍼 함수에 전달
+                base_damage = attacker['physical'] + random.randint(0, attacker['mental']) 
+
                 await self._apply_damage(battle, attacker, target, base_damage, crit_chance=0.8)
             elif skill_number == 2: # 대상 행동 횟수 감소
                 target.setdefault('effects', {})['action_point_modifier'] = -1
@@ -740,10 +752,11 @@ class BattleCog(commands.Cog):
                 if not (2 <= distance <= 3): return await ctx.send("❌ 원거리 공격 사거리가 아닙니다.")
                 
                 base_damage = attacker['mental'] + random.randint(0, attacker['physical'])
-                # 50% 확률로 2배, 아니면 1.5배의 기본 배율을 헬퍼 함수에 전달
-                base_multiplier = 2.0 if random.random() < 0.5 else 1.5
-                
-                await self._apply_damage(battle, attacker, target, base_damage, base_multiplier)
+                attacker.setdefault('effects', {})['skill_crit_chance'] = 0.5
+        
+                    
+                    # 2. 헬퍼 함수를 호출합니다.
+                await self._apply_damage(battle, attacker, target, base_damage)
 
             elif skill_number == 2: target.setdefault('effects', {})['mobility_modifier'] = -1; battle.add_log(f"🌀 {attacker['name']}이(가) {target['name']}의 다음 턴 이동력을 1 감소!")
             else: return await ctx.send("잘못된 스킬 번호입니다.")
@@ -765,15 +778,12 @@ class BattleCog(commands.Cog):
                 battle.add_log(f"🩸 {attacker['name']}이(가) 체력을 {self_damage} 소모합니다!")
 
                 base_damage = attacker['mental'] + random.randint(0, attacker['physical'])
-                # 80% 크리티컬 확률을 헬퍼 함수에 전달
-                await self._apply_damage(battle, attacker, target, base_damage, crit_chance=0.8)
-
-
+                attacker.setdefault('effects', {})['skill_crit_chance'] = 0.8
 
 
             elif skill_number == 2: # 광역 공격 / 단일 공격
                 # 1. 사거리 확인
-                if not (2 <= distance <= 3): return await ctx.send("❌ 원거리 스킬 사거리가 아닙니다. (2~3칸)")
+                if not (2 <= distance <= 3): return await ctx.send("❌ 원거리 스킬 사거리가 아닙니다.")
                 
                 base_damage = attacker['mental'] + random.randint(0, attacker['physical'])
 
@@ -788,7 +798,7 @@ class BattleCog(commands.Cog):
                             await self._apply_damage(battle, attacker, enemy_target, base_damage)
                             hit_enemies.append(enemy_target['name'])
                     
-                    if not hit_enemies: return await ctx.send("사거리(2~3칸) 안에 있는 적이 없습니다.")
+                    if not hit_enemies: return await ctx.send("사거리 안에 있는 적이 없습니다.")
                     battle.add_log(f"☄️ {attacker['name']}이(가) **{', '.join(hit_enemies)}**에게 광역 피해!")
                     
                     if random.random() < 0.20:
@@ -798,7 +808,7 @@ class BattleCog(commands.Cog):
                             hit_teammate_id = random.choice(teammate_ids)
                             teammate_target = battle.players[hit_teammate_id]
                             
-                            battle.add_log(f"휩쓸린 마력에 팀원 **{teammate_target['name']}**이(가) 휘말립니다!")
+                            battle.add_log(f"마력에 팀원 **{teammate_target['name']}**이(가) 휘말립니다!")
                             # 팀원에게도 동일한 규칙으로 데미지 적용
                             await self._apply_damage(battle, attacker, teammate_target, base_damage)
                 
@@ -818,8 +828,8 @@ class BattleCog(commands.Cog):
                 # 1. 기본 데미지만 계산
                 base_damage = attacker['physical'] + random.randint(0, attacker['mental'])
                 
-                # 2. 50%의 크리티컬 확률을 헬퍼 함수에 전달
-                await self._apply_damage(battle, attacker, target, base_damage, crit_chance=0.5)
+                attacker.setdefault('effects', {})['skill_crit_chance'] = 0.5
+                await self._apply_damage(battle, attacker, target, base_damage)
 
 
 
@@ -847,7 +857,7 @@ class BattleCog(commands.Cog):
                 can_attack, attack_type = False, ""
                 if distance == 1: can_attack, attack_type = True, "근거리"
                 elif 2 <= distance <= 3: can_attack, attack_type = True, "원거리"
-                if not can_attack: return await ctx.send("❌ 공격 사거리가 아닙니다. (1~3칸)")
+                if not can_attack: return await ctx.send("❌ 공격 사거리가 아닙니다.")
 
                 # 2. 기본 데미지 계산 후 헬퍼 함수 호출
                 base_damage = attacker['physical'] + random.randint(0, attacker['mental']) if attack_type == "근거리" else attacker['mental'] + random.randint(0, attacker['physical'])
