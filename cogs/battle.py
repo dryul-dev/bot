@@ -247,6 +247,16 @@ class TeamBattle(Battle):
         if extra_message: embed.set_footer(text=extra_message)
         await self.channel.send(embed=embed)
 
+
+    def handle_retirement(self, retired_player_stats):
+        """리타이어한 플레이어를 맵에서 제거하고 로그를 추가합니다."""
+        pos = retired_player_stats.get('pos')
+        if pos is not None and self.grid[pos] == retired_player_stats.get('emoji'):
+            self.grid[pos] = "□" # 맵에서 아이콘을 빈칸으로 변경
+        self.add_log(f"☠️ {retired_player_stats['name']}이(가) 쓰러졌습니다!")
+
+
+
     async def check_game_over(self):
         team_a_alive = any(self.players[pid]['current_hp'] > 0 for pid in self.team_a_ids)
         team_b_alive = any(self.players[pid]['current_hp'] > 0 for pid in self.team_b_ids)
@@ -512,11 +522,22 @@ class BattleCog(commands.Cog):
             battle.add_log(log_message)
             await ctx.send(log_message); await asyncio.sleep(1.5)
 
-            if target['current_hp'] <= 0:
-                await battle.end_battle(win=True)
-            else:
-                await battle.monster_turn()
-            return
+        if target['current_hp'] <= 0:
+            # ▼▼▼ 여기가 수정된 부분입니다 ▼▼▼
+            if battle.battle_type == "pvp_team":
+                # 1. 리타이어 처리 함수를 먼저 호출하여 맵 상태를 업데이트
+                battle.handle_retirement(target)
+                
+                # 2. 게임이 끝났는지 확인
+                is_over = await battle.check_game_over()
+                
+                # 3. 게임이 끝나지 않았다면, 아이콘이 치워진 맵을 출력
+                if not is_over:
+                    await battle.display_board()
+                # 게임이 끝났다면, check_game_over 내부에서 승리 메시지를 보냄
+                else:
+                    if ctx.channel.id in self.active_battles:
+                        del self.active_battles[ctx.channel.id]
 
         # --- PvP 로직 (헬퍼 함수 사용) ---
         elif battle.battle_type in ["pvp_1v1", "pvp_team"]:
@@ -897,18 +918,25 @@ class BattleCog(commands.Cog):
         attacker['special_cooldown'] = 2
         await battle.handle_action_cost(1)
         
+        # ▼▼▼ 여기가 수정된 부분입니다 ▼▼▼
+        # 타겟이 쓰러졌는지 확인
         if target['current_hp'] <= 0:
-            battle.add_log(f"☠️ {target['name']}이(가) 쓰러졌습니다!")
+            # 팀전일 경우에만 리타이어 헬퍼 호출
             if battle.battle_type == "pvp_team":
+                battle.handle_retirement(target)
+                
+                # 게임 종료 여부 확인
                 if await battle.check_game_over(): 
                     del self.active_battles[ctx.channel.id]
                 else: 
-                    await battle.display_board()
-            else: # pvp_1v1
+                    await battle.display_board() # 게임이 안 끝났으면 업데이트된 맵 표시
+            
+            # 1:1 대결일 경우 (기존 방식)
+            else: 
+                battle.add_log(f"☠️ {target['name']}이(가) 쓰러졌습니다!")
                 await battle.end_battle(ctx.author, f"{target['name']}이(가) 스킬을 받고 쓰러졌습니다!")
                 del self.active_battles[ctx.channel.id]
-
-
+ 
 #============================================================================================================================
 
 
