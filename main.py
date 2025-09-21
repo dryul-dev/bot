@@ -24,11 +24,12 @@ def load_data():
 def save_data(data):
     with open("player_data.json", 'w', encoding='utf-8') as f: json.dump(data, f, indent=4, ensure_ascii=False)
 
-@tasks.loop(minutes=5) # 5분마다 모든 유저를 확인
+# main.py
+
+# 일일 초기화 태스크 (유저 시간대별 오전 2시 기준)
+@tasks.loop(minutes=10) # 10분마다 모든 유저를 확인
 async def daily_reset_task():
     all_data = load_data()
-    
-    # 변경사항이 있었는지 확인하는 플래그
     data_changed = False
 
     # 모든 등록된 유저를 한 명씩 확인
@@ -43,19 +44,16 @@ async def daily_reset_task():
         except pytz.UnknownTimeZoneError:
             user_tz = KST # 잘못된 값이면 KST로
         
-        # 유저의 현지 시간 기준 오늘 날짜
-        today_local_str = datetime.now(user_tz).strftime('%Y-%m-%d')
-        
-        # 마지막 초기화 날짜를 불러옴
-        last_reset = player_data.get("last_daily_reset_date")
+        now_local = datetime.now(user_tz)
+        today_local_str = now_local.strftime('%Y-%m-%d')
+        last_reset_date = player_data.get("last_daily_reset_date")
 
-        # 마지막 초기화 날짜가 오늘과 다르다면 초기화 실행
-        if last_reset != today_local_str:
+        # 현지 시간이 오전 2시가 지났고, 아직 오늘 초기화를 하지 않았다면 실행
+        if now_local.hour >= 2 and last_reset_date != today_local_str:
             player_data["challenge_registered_today"] = False
             player_data["challenge_type"] = None
-            player_data["last_daily_reset_date"] = today_local_str # 오늘 날짜로 기록 업데이트
+            player_data["last_daily_reset_date"] = today_local_str
             
-            # 목표 등록 횟수도 초기화
             if "daily_goal_info" in player_data:
                 player_data["daily_goal_info"]["count"] = 0
 
@@ -66,7 +64,6 @@ async def daily_reset_task():
     if data_changed:
         save_data(all_data)
         print("일일 정보 초기화 및 데이터 저장 완료.")
-
 # on_ready 함수도 수정이 필요할 수 있습니다.
 @bot.event
 async def on_ready():

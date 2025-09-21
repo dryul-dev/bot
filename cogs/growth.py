@@ -414,7 +414,7 @@ class GrowthCog(commands.Cog):
         now_local = datetime.now(user_tz).time()
 
         if not (time(16, 0) <= now_local < time(2, 0)):
-            embed = discord.Embed(title="❌ 도전 등록 실패", description=f"**도전 완료는 오후 4시부터 오전 2시까지만 가능합니다.**\n(현재 시간: {now_local.strftime('%H:%M')})", color=discord.Color.red())
+            embed = discord.Embed(title="❌ 도전 완료 실패", description=f"**도전 완료는 오후 4시부터 오전 2시까지만 가능합니다.**\n(현재 시간: {now_local.strftime('%H:%M')})", color=discord.Color.red())
             if "timezone" not in player_data:
                 embed.set_footer(text="`!시간대설정` 명령어로 자신의 시간대를 설정할 수 있습니다.")
             await ctx.send(embed=embed)
