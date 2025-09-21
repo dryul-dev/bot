@@ -268,6 +268,14 @@ class GrowthCog(commands.Cog):
 
     @commands.command(name="정신도전")
     async def register_mental_challenge(self, ctx):
+
+        all_data = load_data()
+        player_id = str(ctx.author.id)
+        player_data = all_data.get(player_id, {}) # 데이터가 없는 유저를 위해 기본값 설정
+
+        if not player_data or not player_data.get("registered"):
+            return await ctx.send("먼저 `!등록`을 진행해주세요.")
+
         user_tz_str = player_data.get("timezone", "Asia/Seoul")
         try:
             user_tz = pytz.timezone(user_tz_str)
@@ -316,6 +324,14 @@ class GrowthCog(commands.Cog):
 
     @commands.command(name="육체도전")
     async def register_physical_challenge(self, ctx):
+
+        all_data = load_data()
+        player_id = str(ctx.author.id)
+        player_data = all_data.get(player_id, {}) # 데이터가 없는 유저를 위해 기본값 설정
+
+        if not player_data or not player_data.get("registered"):
+            return await ctx.send("먼저 `!등록`을 진행해주세요.")
+
         user_tz_str = player_data.get("timezone", "Asia/Seoul")
         try:
             user_tz = pytz.timezone(user_tz_str)
@@ -364,6 +380,13 @@ class GrowthCog(commands.Cog):
 
     @commands.command(name="도전완료")
     async def complete_challenge(self, ctx):
+
+        all_data = load_data()
+        player_id = str(ctx.author.id)
+        player_data = all_data.get(player_id, {}) # 데이터가 없는 유저를 위해 기본값 설정
+
+        if not player_data or not player_data.get("registered"):
+            return await ctx.send("먼저 `!등록`을 진행해주세요.")
 
         user_tz_str = player_data.get("timezone", "Asia/Seoul")
         try:
@@ -424,6 +447,14 @@ class GrowthCog(commands.Cog):
     @commands.command(name="휴식")
     async def take_rest(self, ctx):
         """오전 6시~14시 사이에 오늘의 도전을 쉬고, 다음 전투를 위한 버프를 받습니다."""
+
+        all_data = load_data()
+        player_id = str(ctx.author.id)
+        player_data = all_data.get(player_id, {}) # 데이터가 없는 유저를 위해 기본값 설정
+
+        if not player_data or not player_data.get("registered"):
+            return await ctx.send("먼저 `!등록`을 진행해주세요.")
+
         user_tz_str = player_data.get("timezone", "Asia/Seoul")
         try:
             user_tz = pytz.timezone(user_tz_str)
@@ -438,9 +469,6 @@ class GrowthCog(commands.Cog):
                 embed.set_footer(text="`!시간대설정` 명령어로 자신의 시간대를 설정할 수 있습니다.")
             await ctx.send(embed=embed)
             return
-
-
-
 
             
         all_data = load_data()
@@ -489,20 +517,26 @@ class GrowthCog(commands.Cog):
             "어제보다 더 나은 오늘이 함께하리니..."
         ]
 
-        # KST 기준 오늘 날짜 확인
-        today_kst = datetime.now(self.KST).strftime('%Y-%m-%d')
+        user_tz_str = player_data.get("timezone", "Asia/Seoul")
+        try:
+            user_tz = pytz.timezone(user_tz_str)
+        except pytz.UnknownTimeZoneError:
+            user_tz = self.KST # 잘못된 값이 저장된 경우 KST로
+        
+        today_local_str = datetime.now(user_tz).strftime('%Y-%m-%d')
         last_blessing_date = player_data.get("last_blessing_date")
 
-        # 마지막으로 축복을 받은 날짜가 오늘이 아니라면, 새로운 축복을 뽑습니다.
-        if last_blessing_date != today_kst:
+        # 2. 마지막으로 축복을 받은 날짜가 오늘(현지 기준)이 아니라면, 새로운 축복을 뽑습니다.
+        if last_blessing_date != today_local_str:
             new_blessing = random.choice(blessing_list)
             player_data["today_blessing"] = new_blessing
-            player_data["last_blessing_date"] = today_kst
+            player_data["last_blessing_date"] = today_local_str # 오늘 날짜를 기록
             save_data(all_data)
             current_blessing = new_blessing
-        # 오늘 이미 축복을 받았다면, 저장된 축복을 불러옵니다.
+        # 3. 오늘 이미 축복을 받았다면, 저장된 축복을 불러옵니다.
         else:
             current_blessing = player_data.get("today_blessing", "오류: 오늘의 축복을 찾을 수 없습니다.")
+        # --- ▲▲▲ 여기가 수정된 부분입니다 ▲▲▲ ---
 
         # Embed 생성 및 전송
         embed = discord.Embed(
@@ -510,7 +544,7 @@ class GrowthCog(commands.Cog):
             description=f"**{current_blessing}**",
             color=int(player_data['color'][1:], 16)
         )
-        embed.set_footer(text=f"삼여신의 축복을 당신에게.")
+        embed.set_footer(text=f"{player_data.get('name', ctx.author.display_name)}님의 하루를 응원합니다.")
         await ctx.send(embed=embed)
 
     
