@@ -842,6 +842,57 @@ class GrowthCog(commands.Cog):
         # ▲▲▲ 여기가 추가된 부분입니다 ▲▲▲
 
 
+# cogs/growth.py 의 GrowthCog 클래스 내부에 추가
+
+    @commands.command(name="직업변경")
+    @commands.is_owner()
+    async def change_base_class(self, ctx, target_name: str, *, new_base_class: str):
+        """[관리자용] 유저를 기본 직업 중 하나로 되돌립니다."""
+        
+        all_data = load_data()
+        
+        # 1. 이름으로 플레이어 찾기
+        target_id, target_data = None, None
+        for player_id, player_info in all_data.items():
+            if player_info.get("name") == target_name.strip('"'):
+                target_id = player_id
+                target_data = player_info
+                break
+        
+        if not target_data:
+            return await ctx.send(f"'{target_name}' 이름을 가진 플레이어를 찾을 수 없습니다.")
+
+        # 2. 변경하려는 기본 직업이 유효한지 확인
+        if new_base_class not in self.CLASSES:
+            valid_classes = ", ".join(f"`{c}`" for c in self.CLASSES)
+            return await ctx.send(f"잘못된 기본 직업입니다. {valid_classes} 중에서 선택해주세요.")
+
+        # 3. 데이터 업데이트 (전직 정보 초기화)
+        old_class = target_data.get("class", "없음")
+        
+        all_data[target_id]["class"] = new_base_class
+        all_data[target_id]["advanced_class"] = None
+        all_data[target_id]["attribute"] = None
+        save_data(all_data)
+
+        # 4. 결과 알림
+        embed = discord.Embed(
+            title="🔄 직업 변경 완료",
+            description=f"**{target_name}**님의 직업을 성공적으로 변경했습니다.",
+            color=discord.Color.orange()
+        )
+        embed.add_field(name="대상", value=target_name, inline=True)
+        embed.add_field(name="변경 내용", value=f"`{old_class}` → `{new_base_class}` (기본 직업)", inline=False)
+        embed.set_footer(text="상위 직업 및 속성 정보가 초기화되었습니다.")
+        await ctx.send(embed=embed)
+
+    @change_base_class.error
+    async def change_bc_error(self, ctx, error):
+        if isinstance(error, commands.NotOwner):
+            await ctx.send("이 명령어는 봇 소유자만 사용할 수 있습니다.")
+        elif isinstance(error, commands.MissingRequiredArgument):
+            await ctx.send("사용법: `!직업변경 [이름] [새로운 기본직업]`\n> 예시: `!직업변경 홍길동 마법사`")
+
 # cogs/growth.py 의 GrowthCog 클래스 내부
 
     @commands.command(name="데이터점검")
