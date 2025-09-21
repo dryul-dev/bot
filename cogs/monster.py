@@ -122,7 +122,6 @@ class PveBattle:
 
 
     async def monster_turn(self):
-        """몬스터의 턴을 진행하고, 결과를 하나의 Embed로 통합하여 보여줍니다."""
         monster = self.monster_stats
         player = self.player_stats
         
@@ -130,7 +129,8 @@ class PveBattle:
         log_message = ""
         initial_defense = player.get('pve_defense', 0)
 
-        # 1. 몬스터 행동 결정 및 데미지/방어 계산
+        # ▼▼▼ is_strong_attack 변수를 여기서 선언합니다. ▼▼▼
+        is_strong_attack = (action_roll >= 0.9)
         
         # [행동 1: 방어 (30%)]
         if 0.6 <= action_roll < 0.9:
@@ -140,26 +140,22 @@ class PveBattle:
         
         # [행동 2: 공격 (일반 60%, 강한 공격 10%)]
         else:
-            # 강한 공격 여부 결정
-            is_strong_attack = action_roll >= 0.9
             multiplier = 2.0 if is_strong_attack else 1.0
-            
-            # 데미지 계산
             damage = max(1, monster['ap'] + random.randint(-monster['level'], monster['level'])) * multiplier
-            final_damage = max(0, damage - initial_defense)
-            player['pve_defense'] = max(0, initial_defense - damage)
             
-            # 체력 감소
+            defense_consumed = min(initial_defense, damage)
+            final_damage = max(0, damage - initial_defense)
+            player['pve_defense'] = initial_defense - defense_consumed
+            
             player['current_hp'] = max(0, player['current_hp'] - final_damage)
             
-            # 로그 메시지 생성
             if is_strong_attack:
                 log_message = f"💥 **{monster['name']}**의 강한 공격! **{player['name']}**에게 **{final_damage}**의 치명적인 피해!"
             else:
                 log_message = f"👹 **{monster['name']}**의 공격! **{player['name']}**에게 **{final_damage}**의 피해!"
-            
-            if initial_defense > 0:
-                log_message += f" (방어도 {initial_defense} → {player['pve_defense']})"
+
+            if defense_consumed > 0:
+                log_message += f" (방어도 {defense_consumed} 흡수)"
 
         # 2. 플레이어가 쓰러졌는지 확인
         if player['current_hp'] <= 0:

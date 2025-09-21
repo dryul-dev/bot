@@ -327,9 +327,7 @@ class BattleCog(commands.Cog):
         elif random.random() < crit_chance:
             final_multiplier = 2.0
             log_notes.append(f"💥 치명타(2배)!")
-        elif base_multiplier == 1.0:
-            if attacker['class'] == '마법사': final_multiplier = 1.2
-            elif attacker['class'] == '검사': final_multiplier = 1.2
+
         
         # --- 2. 상성 계산 ---
         attribute_damage = 0
@@ -347,9 +345,9 @@ class BattleCog(commands.Cog):
         total_damage = round(base_damage * final_multiplier) + attribute_damage
         defense = target.get('defense', 0)
         
+        defense_consumed = min(defense, total_damage)
         final_damage = max(0, total_damage - defense)
-        defense_remaining = max(0, defense - total_damage)
-        target['defense'] = defense_remaining # 소모된 방어도를 반영
+        target['defense'] = defense - defense_consumed
         
         # --- 4. 최종 데미지 적용 및 로그 생성 ---
         target['current_hp'] = max(0, target['current_hp'] - final_damage)
