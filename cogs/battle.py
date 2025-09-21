@@ -347,14 +347,19 @@ class BattleCog(commands.Cog):
         
         defense_consumed = min(defense, total_damage)
         final_damage = max(0, total_damage - defense)
-        target['defense'] = defense - defense_consumed
         
-        # --- 4. 최종 데미지 적용 및 로그 생성 ---
+        # defense_remaining 변수를 직접 생성
+        defense_remaining = defense - defense_consumed
+        
+        # target의 방어도를 남은 방어도로 업데이트
+        target['defense'] = defense_remaining
+        
         target['current_hp'] = max(0, target['current_hp'] - final_damage)
 
         log_message = f"💥 {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해!"
         if log_notes: log_message += " " + " ".join(log_notes)
         if defense > 0:
+            # 생성된 defense_remaining 변수를 로그에 사용
             log_message += f" (방어도 {defense} → {defense_remaining})"
         
         battle.add_log(log_message)
