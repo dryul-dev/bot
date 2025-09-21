@@ -21,8 +21,8 @@ HUNTING_GROUNDS = {
     "마을 인근": {
         "monsters": ["슬라임", "고블린", "임프"],
         "difficulty": {
-            "hp_mult": [2.5, 3.5],
-            "ap_div": [6.0, 8.0],
+            "hp_mult": [3.0, 4.5],
+            "ap_div": [6.0, 7.0],
             "min_hp": 15,
             "min_ap": 3
         }
@@ -30,8 +30,8 @@ HUNTING_GROUNDS = {
     "자작나무 숲": {
         "monsters": ["성난 늑대", "오염된 정령"],
         "difficulty": {
-            "hp_mult": [3.0, 4.5],
-            "ap_div": [5.0, 7.0],
+            "hp_mult": [4.0, 5.5],
+            "ap_div": [4.0, 7.0],
             "min_hp": 20,
             "min_ap": 5
         }

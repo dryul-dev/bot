@@ -310,7 +310,7 @@ class BattleCog(commands.Cog):
 
 
 
-    async def _apply_damage(self, battle, attacker, target, base_damage, base_multiplier=1.0, crit_chance=0.1):
+    async def _apply_damage(self, battle, attacker, target, base_damage, base_multiplier=1.0, crit_chance=0.1, is_pve=False):
         """[최종 수정본] PvP 데미지 계산 및 적용을 전담하는 함수"""
         
         final_multiplier = base_multiplier
@@ -319,7 +319,7 @@ class BattleCog(commands.Cog):
 
         # --- 1. 멀티플라이어 우선순위 적용 ---
         if 'next_attack_multiplier' in attacker_effects:
-            final_multiplier = attacker_effects.pop('next_attack_multiplier', 1.0)
+            final_multiplier = attacker_effects.pop('next_attack_multiplier')
             log_notes.append(f"✨ 부여 효과({final_multiplier}배)!")
         elif attacker.get('attack_buff_stacks', 0) > 0:
             final_multiplier = 1.5; attacker['attack_buff_stacks'] -= 1
@@ -327,43 +327,35 @@ class BattleCog(commands.Cog):
         elif random.random() < crit_chance:
             final_multiplier = 2.0
             log_notes.append(f"💥 치명타(2배)!")
-
         
-        # --- 2. 상성 계산 ---
         attribute_damage = 0
         advantages = {'Wit': 'Gut', 'Gut': 'Heart', 'Heart': 'Wit'}
         if attacker.get('attribute') and target.get('attribute'):
             if advantages.get(attacker['attribute']) == target['attribute']:
                 bonus = random.randint(0, attacker['level'] * 2); attribute_damage += bonus
-                log_notes.append(f"👍 상성 우위(+{bonus})")
             elif advantages.get(target['attribute']) == attacker['attribute']:
                 penalty = random.randint(0, attacker['level'] * 2); attribute_damage -= penalty
-                log_notes.append(f"👎 상성 열세({penalty})")
 
-        # ▼▼▼ 여기가 수정된 부분입니다 ▼▼▼
-        # --- 3. 방어 계산 및 소모 ---
+        # 4. PvE 장비 보너스 적용
         total_damage = round(base_damage * final_multiplier) + attribute_damage
-        defense = target.get('defense', 0)
-        
+        if is_pve:
+            total_damage += attacker.get('gear_damage_bonus', 0)
+
+        # 5. 방어 계산 및 소모
+        defense = target.get('pve_defense' if is_pve else 'defense', 0)
         defense_consumed = min(defense, total_damage)
         final_damage = max(0, total_damage - defense)
         
-        # defense_remaining 변수를 직접 생성
-        defense_remaining = defense - defense_consumed
+        if is_pve: target['pve_defense'] = defense - defense_consumed
+        else: target['defense'] = defense - defense_consumed
         
-        # target의 방어도를 남은 방어도로 업데이트
-        target['defense'] = defense_remaining
-        
+        # 6. 최종 데미지 적용 및 로그 생성
         target['current_hp'] = max(0, target['current_hp'] - final_damage)
-
         log_message = f"💥 {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해!"
         if log_notes: log_message += " " + " ".join(log_notes)
-        if defense > 0:
-            # 생성된 defense_remaining 변수를 로그에 사용
-            log_message += f" (방어도 {defense} → {defense_remaining})"
-        
+        if attribute_damage != 0: log_message += f" (상성 {'+' if attribute_damage > 0 else ''}{attribute_damage})"
+        if defense_consumed > 0: log_message += f" (방어도 {defense_consumed} 흡수)"
         battle.add_log(log_message)
-        # ▲▲▲ 여기가 수정된 부분입니다 ▲▲▲
 
 
 #============================================================================================================================
@@ -506,25 +498,25 @@ class BattleCog(commands.Cog):
 
         # --- PvE 로직 ---
         if battle.battle_type == "pve":
+            # 1. 공격자와 타겟을 먼저 정의합니다.
             attacker = battle.player_stats
             target = battle.monster_stats
+            
+            # 2. 공격 타입을 결정합니다.
             attack_type = "근거리" if attacker['class'] == '검사' else ("근거리" if attacker.get('physical', 0) >= attacker.get('mental', 0) else "원거리")
             
+            # 3. 위 정보들을 바탕으로 기본 데미지를 계산합니다.
             base_damage = attacker['physical'] + random.randint(0, attacker['mental']) if attack_type == "근거리" else attacker['mental'] + random.randint(0, attacker['physical'])
-            final_damage = max(1, round(base_damage) + attacker.get('gear_damage_bonus', 0) - target.get('defense', 0))
             
-            target['current_hp'] = max(0, target['current_hp'] - final_damage)
-            log_message = f"💥 {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해를 입혔습니다!"
-            battle.add_log(log_message)
-            await ctx.send(log_message); await asyncio.sleep(1.5)
+            # 4. 헬퍼 함수를 호출하여 모든 계산을 맡깁니다.
+            await self._apply_damage(battle, attacker, target, base_damage, is_pve=True)
 
-            # PvE 전용 후속 처리
+            # 5. 후속 처리를 진행합니다.
             if target['current_hp'] <= 0:
                 await battle.end_battle(win=True)
             else:
                 await battle.monster_turn()
             return # PvE 로직은 여기서 완전히 종료
-
         # --- PvP 로직 (헬퍼 함수 사용) ---
         elif battle.battle_type in ["pvp_1v1", "pvp_team"]:
             # 1. 공격자, 타겟, 사거리 등 기본 정보 설정
