@@ -310,25 +310,26 @@ class BattleCog(commands.Cog):
 
 
 
- # cogs/battle.py 의 BattleCog 클래스 내부
-
-    async def _apply_damage(self, battle, attacker, target, base_damage):
+    async def _apply_damage(self, battle, attacker, target, base_damage, base_multiplier=1.0, crit_chance=0.1):
         """[최종 수정본] PvP 데미지 계산 및 적용을 전담하는 함수"""
         
-        final_multiplier = 1.0
+        final_multiplier = base_multiplier
         log_notes = []
         attacker_effects = attacker.get('effects', {})
 
         # --- 1. 멀티플라이어 우선순위 적용 ---
         if 'next_attack_multiplier' in attacker_effects:
-            final_multiplier = attacker_effects.pop('next_attack_multiplier')
+            final_multiplier = attacker_effects.pop('next_attack_multiplier', 1.0)
             log_notes.append(f"✨ 부여 효과({final_multiplier}배)!")
         elif attacker.get('attack_buff_stacks', 0) > 0:
             final_multiplier = 1.5; attacker['attack_buff_stacks'] -= 1
             log_notes.append(f"✨ 강화된 공격(1.5배)!")
-        elif random.random() < 0.10:
+        elif random.random() < crit_chance:
             final_multiplier = 2.0
             log_notes.append(f"💥 치명타(2배)!")
+        elif base_multiplier == 1.0:
+            if attacker['class'] == '마법사': final_multiplier = 1.2
+            elif attacker['class'] == '검사': final_multiplier = 1.2
         
         # --- 2. 상성 계산 ---
         attribute_damage = 0
@@ -336,24 +337,32 @@ class BattleCog(commands.Cog):
         if attacker.get('attribute') and target.get('attribute'):
             if advantages.get(attacker['attribute']) == target['attribute']:
                 bonus = random.randint(0, attacker['level'] * 2); attribute_damage += bonus
+                log_notes.append(f"👍 상성 우위(+{bonus})")
             elif advantages.get(target['attribute']) == attacker['attribute']:
                 penalty = random.randint(0, attacker['level'] * 2); attribute_damage -= penalty
-        
-        # --- 3. 방어 계산 ---
+                log_notes.append(f"👎 상성 열세({penalty})")
+
+        # ▼▼▼ 여기가 수정된 부분입니다 ▼▼▼
+        # --- 3. 방어 계산 및 소모 ---
         total_damage = round(base_damage * final_multiplier) + attribute_damage
         defense = target.get('defense', 0)
+        
         final_damage = max(0, total_damage - defense)
         defense_remaining = max(0, defense - total_damage)
-        target['defense'] = defense_remaining
-
+        target['defense'] = defense_remaining # 소모된 방어도를 반영
+        
         # --- 4. 최종 데미지 적용 및 로그 생성 ---
         target['current_hp'] = max(0, target['current_hp'] - final_damage)
 
         log_message = f"💥 {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해!"
         if log_notes: log_message += " " + " ".join(log_notes)
-        if attribute_damage != 0: log_message += f" (상성 {'+' if attribute_damage > 0 else ''}{attribute_damage})"
-        if defense > 0: log_message += f" (방어도 {defense} → {defense_remaining})"
+        if defense > 0:
+            log_message += f" (방어도 {defense} → {defense_remaining})"
+        
         battle.add_log(log_message)
+        # ▲▲▲ 여기가 수정된 부분입니다 ▲▲▲
+
+
 #============================================================================================================================
 
     @commands.command(name="대결")
@@ -512,30 +521,6 @@ class BattleCog(commands.Cog):
             else:
                 await battle.monster_turn()
             return # PvE 로직은 여기서 완전히 종료
-
-        # --- PvP 로직 ---
-        elif battle.battle_type in ["pvp_1v1", "pvp_team"]:
-            # 1. 공격자, 타겟, 사거리 등 기본 정보 설정
-            # ... (이전 답변의 완성된 PvP용 공격자/타겟/사거리 확인 로직) ...
-            
-            # 2. 기본 데미지만 계산 후 헬퍼 함수 호출
-            base_damage = attacker['physical'] + random.randint(0, attacker['mental']) if attack_type == "근거리" else attacker['mental'] + random.randint(0, attacker['physical'])
-            await self._apply_damage(battle, attacker, target, base_damage)
-
-            # 3. PvP 전용 후속 처리
-            if target['current_hp'] <= 0:
-                if battle.battle_type == "pvp_team":
-                    battle.handle_retirement(target)
-                    if await battle.check_game_over(): 
-                        del self.active_battles[ctx.channel.id]
-                    else: 
-                        await battle.display_board()
-                else: # pvp_1v1
-                    battle.add_log(f"☠️ {target['name']}이(가) 쓰러졌습니다!")
-                    await battle.end_battle(ctx.author, f"{target['name']}이(가) 공격을 받고 쓰러졌습니다!")
-                    del self.active_battles[ctx.channel.id]
-            else:
-                await battle.handle_action_cost(1)
 
         # --- PvP 로직 (헬퍼 함수 사용) ---
         elif battle.battle_type in ["pvp_1v1", "pvp_team"]:
