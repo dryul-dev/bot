@@ -7,7 +7,7 @@ import asyncio
 import os
 import random
 from datetime import datetime, time, timedelta, timezone
-
+import pytz
 
 
 # Cog 외부의 헬퍼 함수 (데이터 로딩/저장)
@@ -229,12 +229,55 @@ class GrowthCog(commands.Cog):
 
 
 
+    @commands.command(name="시간대설정")
+    async def set_timezone(self, ctx, timezone_name: str):
+        """자신의 시간대를 설정합니다. (예: !시간대설정 Asia/Seoul)"""
+        if timezone_name not in pytz.all_timezones:
+            embed = discord.Embed(
+                title="❌ 잘못된 시간대 이름입니다.",
+                description="[이곳](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones)에서 자신의 지역에 맞는 'TZ database name'을 찾아 정확하게 입력해주세요.",
+                color=discord.Color.red()
+            )
+            embed.add_field(name="입력 예시", value="`!시간대설정 America/New_York`\n`!시간대설정 Europe/London`")
+            return await ctx.send(embed=embed)
+
+        all_data = load_data()
+        player_id = str(ctx.author.id)
+        player_data = all_data.get(player_id)
+        if not player_data: return await ctx.send("먼저 `!등록`을 진행해주세요.")
+            
+        player_data['timezone'] = timezone_name
+        save_data(all_data)
+        
+        user_tz = pytz.timezone(timezone_name)
+        current_time = datetime.now(user_tz).strftime("%Y년 %m월 %d일 %H:%M")
+
+        embed = discord.Embed(
+            title="✅ 시간대 설정 완료",
+            description=f"**{ctx.author.display_name}**님의 시간대가 **{timezone_name}**(으)로 설정되었습니다.",
+            color=discord.Color.blue()
+        )
+        embed.add_field(name="현재 설정된 시간", value=current_time)
+        await ctx.send(embed=embed)
+
+
+
+
+
     @commands.command(name="정신도전")
     async def register_mental_challenge(self, ctx):
-        """오전 6시~14시 사이에 오늘의 정신 도전을 등록합니다."""
-        now_kst = datetime.now(self.KST).time()
-        if not (time(6, 0) <= now_kst < time(14, 0)):
-            embed = discord.Embed(title="❌ 도전 등록 실패", description=f"**도전 등록은 KST 기준 오전 6시부터 오후 2시까지만 가능합니다.**\n(현재 시간: {now_kst.strftime('%H:%M')})", color=discord.Color.red())
+        user_tz_str = player_data.get("timezone", "Asia/Seoul")
+        try:
+            user_tz = pytz.timezone(user_tz_str)
+        except pytz.UnknownTimeZoneError:
+            user_tz = self.KST # 잘못된 값이 저장된 경우 KST로
+
+        now_local = datetime.now(user_tz).time()
+
+        if not (time(6, 0) <= now_local < time(14, 0)):
+            embed = discord.Embed(title="❌ 도전 등록 실패", description=f"**도전 등록은 현지 시간 기준 오전 6시부터 오후 2시까지만 가능합니다.**\n(현재 시간: {now_local.strftime('%H:%M')})", color=discord.Color.red())
+            if "timezone" not in player_data:
+                embed.set_footer(text="`!시간대설정` 명령어로 자신의 시간대를 설정할 수 있습니다.")
             await ctx.send(embed=embed)
             return
 
@@ -271,10 +314,18 @@ class GrowthCog(commands.Cog):
 
     @commands.command(name="육체도전")
     async def register_physical_challenge(self, ctx):
-        """오전 6시~14시 사이에 오늘의 육체 도전을 등록합니다."""
-        now_kst = datetime.now(self.KST).time()
-        if not (time(6, 0) <= now_kst < time(14, 0)):
-            embed = discord.Embed(title="❌ 도전 등록 실패", description=f"**도전 등록은 KST 기준 오전 6시부터 오후 2시까지만 가능합니다.**\n(현재 시간: {now_kst.strftime('%H:%M')})", color=discord.Color.red())
+        user_tz_str = player_data.get("timezone", "Asia/Seoul")
+        try:
+            user_tz = pytz.timezone(user_tz_str)
+        except pytz.UnknownTimeZoneError:
+            user_tz = self.KST # 잘못된 값이 저장된 경우 KST로
+
+        now_local = datetime.now(user_tz).time()
+
+        if not (time(6, 0) <= now_local < time(14, 0)):
+            embed = discord.Embed(title="❌ 도전 등록 실패", description=f"**도전 등록은 현지 시간 기준 오전 6시부터 오후 2시까지만 가능합니다.**\n(현재 시간: {now_local.strftime('%H:%M')})", color=discord.Color.red())
+            if "timezone" not in player_data:
+                embed.set_footer(text="`!시간대설정` 명령어로 자신의 시간대를 설정할 수 있습니다.")
             await ctx.send(embed=embed)
             return
 
@@ -311,12 +362,23 @@ class GrowthCog(commands.Cog):
 
     @commands.command(name="도전완료")
     async def complete_challenge(self, ctx):
-        """오후 16시~02시 사이에 등록한 도전을 완료하고 스탯을 얻습니다."""
-        now_kst = datetime.now(self.KST)
-        if not (now_kst.hour >= 16 or now_kst.hour < 2): 
-            embed = discord.Embed(title="❌ 도전 완료 실패", description=f"**도전 완료는 KST 기준 오후 4시부터 새벽 2시까지만 가능합니다.**\n(현재 시간: {now_kst.strftime('%H:%M')})", color=discord.Color.red())
+
+        user_tz_str = player_data.get("timezone", "Asia/Seoul")
+        try:
+            user_tz = pytz.timezone(user_tz_str)
+        except pytz.UnknownTimeZoneError:
+            user_tz = self.KST # 잘못된 값이 저장된 경우 KST로
+
+        now_local = datetime.now(user_tz).time()
+
+        if not (time(16, 0) <= now_local < time(2, 0)):
+            embed = discord.Embed(title="❌ 도전 등록 실패", description=f"**도전 완료는 현지 시간 기준 오후 4시부터 오전 2시까지만 가능합니다.**\n(현재 시간: {now_local.strftime('%H:%M')})", color=discord.Color.red())
+            if "timezone" not in player_data:
+                embed.set_footer(text="`!시간대설정` 명령어로 자신의 시간대를 설정할 수 있습니다.")
             await ctx.send(embed=embed)
             return
+
+
             
         all_data = load_data()
         player_id = str(ctx.author.id)
@@ -360,11 +422,24 @@ class GrowthCog(commands.Cog):
     @commands.command(name="휴식")
     async def take_rest(self, ctx):
         """오전 6시~14시 사이에 오늘의 도전을 쉬고, 다음 전투를 위한 버프를 받습니다."""
-        now_kst = datetime.now(self.KST).time()
-        if not (time(6, 0) <= now_kst < time(14, 0)):
-            embed = discord.Embed(title="❌ 휴식 선언 실패", description=f"**휴식은 KST 기준 오전 6시부터 오후 2시까지만 선택할 수 있습니다.**\n(현재 시간: {now_kst.strftime('%H:%M')})", color=discord.Color.red())
+        user_tz_str = player_data.get("timezone", "Asia/Seoul")
+        try:
+            user_tz = pytz.timezone(user_tz_str)
+        except pytz.UnknownTimeZoneError:
+            user_tz = self.KST # 잘못된 값이 저장된 경우 KST로
+
+        now_local = datetime.now(user_tz).time()
+
+        if not (time(6, 0) <= now_local < time(14, 0)):
+            embed = discord.Embed(title="❌ 휴식 선언 실패", description=f"**휴식 선언은 현지 시간 기준 오전 6시부터 오후 2시까지만 가능합니다.**\n(현재 시간: {now_local.strftime('%H:%M')})", color=discord.Color.red())
+            if "timezone" not in player_data:
+                embed.set_footer(text="`!시간대설정` 명령어로 자신의 시간대를 설정할 수 있습니다.")
             await ctx.send(embed=embed)
             return
+
+
+
+
             
         all_data = load_data()
         player_id = str(ctx.author.id)
@@ -451,15 +526,32 @@ class GrowthCog(commands.Cog):
         if len(goal_name) > 10:
             return await ctx.send("목표는 공백 포함 10자 이내로 설정해주세요.")
 
-        today_kst = datetime.now(self.KST).strftime('%Y-%m-%d')
+        today_kst_str = datetime.now(self.KST).strftime('%Y-%m-%d')
         
-        # 날짜와 횟수를 함께 기록하는 'daily_goal_info'를 불러옵니다.
-        daily_goal_info = player_data.get("daily_goal_info", {})
-        last_date = daily_goal_info.get("date")
-        daily_count = daily_goal_info.get("count", 0)
+        # 1. 유저의 일일 목표 정보를 불러옵니다.
+        daily_info = player_data.get("daily_goal_info", {"date": None, "count": 0})
+        last_date = daily_info.get("date")
+        daily_count = daily_info.get("count", 0)
+
+        # 2. 마지막 등록일이 오늘이 아니라면, 카운트를 0으로 초기화합니다.
+        if last_date != today_kst_str:
+            daily_count = 0
+
+        # 3. 초기화된 카운트를 기준으로 2개가 넘었는지 확인합니다.
+        if daily_count >= 2:
+            return await ctx.send("목표는 하루에 두 번까지만 등록할 수 있습니다. 내일 다시 시도해주세요.")
+        
+        # 4. 모든 검사를 통과했으면 목표를 추가합니다.
+        goals.append(goal_name)
+        player_data["goals"] = goals
+        
+        # 5. 오늘 날짜와 함께, 증가된 카운트를 저장합니다.
+        player_data["daily_goal_info"] = {"date": today_kst_str, "count": daily_count + 1}
+        
+        save_data(all_data)
 
         # 마지막 등록 날짜가 오늘이 아니라면, 횟수를 초기화합니다.
-        if last_date != today_kst:
+        if last_date != today_kst_str:
             daily_count = 0
 
         # 하루 등록 제한(2개)을 확인합니다.
@@ -472,7 +564,7 @@ class GrowthCog(commands.Cog):
 
         goals.append(goal_name)
         player_data["goals"] = goals
-        player_data["last_goal_date"] = today_kst
+        player_data["last_goal_date"] = today_kst_str
         save_data(all_data)
 
         await ctx.send(f"✅ 새로운 목표가 등록되었습니다: **{goal_name}**")
@@ -509,7 +601,7 @@ class GrowthCog(commands.Cog):
     async def achieve_goal(self, ctx, goal_number: int):
         """번호가 부여된 목표를 달성 처리합니다."""
         if not (1 <= goal_number <= 5):
-            return await ctx.send("1번에서 5번까지의 목표만 달성할 수 있습니다.")
+            return await ctx.send("1번에서 10번까지의 목표만 달성할 수 있습니다.")
 
         all_data = load_data()
         player_id = str(ctx.author.id)
@@ -565,7 +657,7 @@ class GrowthCog(commands.Cog):
     async def abandon_goal(self, ctx, goal_number: int):
         """등록된 목표를 중단하고, 격려 포인트를 받습니다."""
         if not (1 <= goal_number <= 5):
-            return await ctx.send("1번에서 5번까지의 목표만 중단할 수 있습니다.")
+            return await ctx.send("1번에서 10번까지의 목표만 중단할 수 있습니다.")
 
         all_data = load_data()
         player_id = str(ctx.author.id)
