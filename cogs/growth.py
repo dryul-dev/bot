@@ -56,16 +56,29 @@ class GrowthCog(commands.Cog):
             # 이름, 이모지, 색상 입력
             await ctx.send("사용할 이름을 입력해주세요.")
             name_msg = await self.bot.wait_for('message', check=check, timeout=60.0)
+
+            forbidden_chars = ['*', '_', '~', '`', '|', '>']
+            if any(char in name_msg.content for char in forbidden_chars):
+                return await ctx.send(f"이름에는 특수문자를 사용할 수 없습니다.")
             
             await ctx.send("맵에서 자신을 나타낼 대표 이모지를 하나 입력해주세요.")
             emoji_msg = await self.bot.wait_for('message', check=check, timeout=60.0)
 
             await ctx.send("대표 색상을 HEX 코드로 입력해주세요. (예: `#FFFFFF`)")
             color_msg = await self.bot.wait_for('message', check=check, timeout=60.0)
+
+            hex_code = color_msg.content
+            if not (hex_code.startswith('#') and len(hex_code) == 7):
+                return await ctx.send("잘못된 형식입니다. `#`을 포함한 7자리 HEX 코드를 입력해주세요.")
+            try:
+                int(hex_code[1:], 16)
+            except ValueError:
+                return await ctx.send("올바르지 않은 HEX 코드입니다. 0-9, A-F 사이의 문자를 사용해주세요.")
+
             all_data[player_id] = {
                 "mental": 0, "physical": 0,
                 "registered": True, "class": player_class, "name": name_msg.content, 
-                "emoji": emoji_msg.content, "color": color_msg.content,
+                "emoji": emoji_msg.content, "color": hex_code,
                 "challenge_type": None, "challenge_registered_today": False,
                 "rest_buff_active": False,
                 "school_points": 0, "inventory": [],
