@@ -150,26 +150,43 @@ class GrowthCog(commands.Cog):
         
         await ctx.send(embed=embed)
    
-
     @commands.command(name="정보수정")
-    async def edit_info(self, ctx, item: str, *, value: str):
-        player_id = str(ctx.author.id)
+    async def edit_info(self, ctx, item_to_edit: str, *, new_value: str):
+        """자신의 이름, 이모지, 컬러 정보를 수정합니다."""
         all_data = load_data()
-        if player_id not in all_data or not all_data[player_id].get("registered", False):
-            await ctx.send("먼저 `!등록`을 진행해주세요.")
-            return
+        player_id = str(ctx.author.id)
+        player_data = all_data.get(player_id)
 
+        if not player_data or not player_data.get("registered"):
+            return await ctx.send("먼저 `!등록`을 진행해주세요.")
+
+        item_to_edit = item_to_edit.lower()
         editable_items = {"이름": "name", "이모지": "emoji", "컬러": "color"}
-        if item not in editable_items:
-            await ctx.send("수정할 수 있는 항목은 `이름`, `이모지`, `컬러` 입니다.")
-            return
+
+        if item_to_edit not in editable_items:
+            return await ctx.send("수정할 수 있는 항목은 `이름`, `이모지`, `컬러` 입니다.")
         
-        key = editable_items[item]
-        all_data[player_id][key] = value
+        key_to_edit = editable_items[item_to_edit]
+
+        # --- 입력값 유효성 검사 ---
+        if key_to_edit == "name":
+            forbidden_chars = ['*', '_', '~', '`', '|', '>']
+            if any(char in new_value for char in forbidden_chars):
+                return await ctx.send(f"이름에는 다음 특수문자를 사용할 수 없습니다: `{'`, `'.join(forbidden_chars)}`")
+        
+        elif key_to_edit == "color":
+            if not (new_value.startswith('#') and len(new_value) == 7):
+                return await ctx.send("잘못된 형식입니다. `#`을 포함한 7자리 HEX 코드를 입력해주세요.")
+            try:
+                int(new_value[1:], 16)
+            except ValueError:
+                return await ctx.send("올바르지 않은 HEX 코드입니다. 0-9, A-F 사이의 문자를 사용해주세요.")
+        
+        # --- 데이터 업데이트 및 저장 ---
+        player_data[key_to_edit] = new_value
         save_data(all_data)
-        await ctx.send(f"'{item}' 정보가 '{value}' (으)로 성공적으로 변경되었습니다.")
-
-
+        
+        await ctx.send(f"✅ **{item_to_edit}** 정보가 '{new_value}' (으)로 성공적으로 변경되었습니다.")
     @commands.command(name="리셋")
     async def reset_my_data(self, ctx):
         """자신의 모든 데이터(프로필, 스탯)를 완전히 초기화합니다."""
