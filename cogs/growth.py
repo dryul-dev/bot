@@ -446,7 +446,7 @@ class GrowthCog(commands.Cog):
 
     @commands.command(name="휴식")
     async def take_rest(self, ctx):
-        """오전 6시~14시 사이에 오늘의 도전을 쉬고, 다음 전투를 위한 버프를 받습니다."""
+        """6시~14시 사이에 오늘의 도전을 쉬고, 다음 전투를 위한 버프를 받습니다."""
 
         all_data = load_data()
         player_id = str(ctx.author.id)
@@ -910,6 +910,8 @@ class GrowthCog(commands.Cog):
 
 # cogs/growth.py 의 GrowthCog 클래스 내부
 
+# cogs/growth.py 의 GrowthCog 클래스 내부
+
     @commands.command(name="데이터점검")
     @commands.is_owner()
     async def fix_data_structure(self, ctx):
@@ -918,32 +920,32 @@ class GrowthCog(commands.Cog):
         
         all_data = load_data()
         updated_users = 0
-        
-        # ▼▼▼ KST를 self에서 직접 참조하도록 수정 ▼▼▼
-        today_kst = datetime.now(self.KST).strftime('%Y-%m-%d')
+        today_kst_str = datetime.now(self.KST).strftime('%Y-%m-%d')
 
         for player_id, player_data in all_data.items():
             is_updated_this_loop = False
             
-            # --- 각 필드 점검 및 업데이트 ---
+            # ▼▼▼ 'updated'를 'is_updated_this_loop'로 통일했습니다 ▼▼▼
             if 'timezone' not in player_data:
                 player_data.setdefault('timezone', None)
-                updated = True
+                is_updated_this_loop = True
 
             if 'last_goal_date' in player_data and 'daily_goal_info' not in player_data:
                 last_date = player_data['last_goal_date']
-                count = 1 if last_date == today_kst else 0
+                count = 1 if last_date == today_kst_str else 0
                 player_data['daily_goal_info'] = {'date': last_date, 'count': count}
                 del player_data['last_goal_date']
                 is_updated_this_loop = True
+
+            if 'last_daily_reset_date' not in player_data:
+                player_data.setdefault('last_daily_reset_date', "2000-01-01")
+                is_updated_this_loop = True
             
-            # --- 업데이트된 유저 수 카운트 ---
             if is_updated_this_loop:
                 updated_users += 1
 
         save_data(all_data)
         await ctx.send(f"✅ 완료! 총 {len(all_data)}명의 유저 중 {updated_users}명의 데이터 구조를 업데이트했습니다.")
-
 
 
 # 봇에 Cog를 추가하기 위한 필수 함수
