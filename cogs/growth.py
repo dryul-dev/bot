@@ -25,11 +25,6 @@ class GrowthCog(commands.Cog):
         # KST, CLASSES 등 필요한 변수를 self에 저장할 수 있습니다.
         self.KST = timezone(timedelta(hours=9))
         self.CLASSES = ["마법사", "마검사", "검사"]
-        self.ADVANCED_CLASSES = {
-            "마법사": {"Wit": "캐스터", "Heart": "힐러", "Gut": "파이오니어"},
-            "마검사": {"Gut": "헌터", "Wit": "조커", "Heart": "그랜터"},
-            "검사": {"Gut": "워리어", "Heart": "디펜더", "Wit": "커맨더"}
-        }
 
     # @bot.command 대신 @commands.command() 를 사용합니다.
     @commands.command(name="등록")
@@ -45,7 +40,7 @@ class GrowthCog(commands.Cog):
 
         try:
             # 직업 선택
-            await ctx.send(f"직업을 선택해주세요. (선택 후 변경 불가)\n> `{'`, `'.join(self.CLASSES)}`")
+            await ctx.send(f"직업을 선택해주세요. (모든 문항 느낌표 없이 작성)\n> `{'`, `'.join(self.CLASSES)}`")
             msg = await self.bot.wait_for('message', check=check, timeout=60.0)
             if msg.content not in self.CLASSES:
                 await ctx.send("잘못된 직업입니다. 등록을 다시 시작해주세요.")
@@ -67,25 +62,21 @@ class GrowthCog(commands.Cog):
 
             await ctx.send("대표 색상을 HEX 코드로 입력해주세요. (예: `#FFFFFF`)")
             color_msg = await self.bot.wait_for('message', check=check, timeout=60.0)
-
             all_data[player_id] = {
-                "mental": 0, 
-                "physical": 0, 
-                "challenge_type": None, 
-                "challenge_registered_today": False,
-                "registered": True, 
-                "class": player_class, 
-                "name": name_msg.content, 
-                "emoji": emoji_msg.content, 
-                "color": color_msg.content, 
-                "attribute": None,
-                "advanced_class": None,
-                "school_points": 0,
-                "inventory": [],
-                "gold": 0,
-                "pve_inventory": {}, # 재료 보관함
-                "pve_item_bag": {} # 완성품아이템보관함
+                "mental": 0, "physical": 0,
+                "registered": True, "class": player_class, "name": name_msg.content, 
+                "emoji": emoji_msg.content, "color": color_msg.content,
+                "challenge_type": None, "challenge_registered_today": False,
+                "rest_buff_active": False,
+                "school_points": 0, "inventory": [],
+                "goals": [], "daily_goal_info": {},
+                "today_blessing": None,
+                "last_blessing_date": None
             }
+            save_data(all_data)
+            await ctx.send("🎉 등록이 완료되었습니다!")
+        except asyncio.TimeoutError:
+            await ctx.send("시간이 초과되어 등록이 취소되었습니다.")
             save_data(all_data)
             await ctx.send("🎉 등록이 완료되었습니다!")
 
@@ -114,10 +105,9 @@ class GrowthCog(commands.Cog):
         progress = total_stats % 5
         progress_bar = '■ ' * progress + '□ ' * (5 - progress)
 
-        # ▼▼▼ 여기가 수정된 부분입니다 ▼▼▼
-        # 전직했으면 상위 직업을, 아니면 기본 직업을 표시
-        display_class = player_data.get("advanced_class") or player_data.get("class")
-        # ▲▲▲ 여기가 수정된 부분입니다 ▲▲▲
+    
+        display_class = player_data.get("class")
+
 
         # Embed 생성
         embed = discord.Embed(
@@ -211,7 +201,9 @@ class GrowthCog(commands.Cog):
             'advanced_class': None,
             'challenge_type': None,
             'challenge_registered_today': False,
-            'rest_buff_active': False
+            'rest_buff_active': False,
+            'today_blessing': None,
+            'last_blessing_date': None
             
         }
         # ▲▲▲ 여기가 수정된 부분입니다 ▲▲▲
@@ -222,50 +214,6 @@ class GrowthCog(commands.Cog):
         await ctx.send(f"✅ **{ctx.author.display_name}**님의 모든 데이터가 성공적으로 초기화되었습니다. `!등록` 명령어를 사용해 새로운 여정을 시작하세요!")
         """자신의 프로필 정보(직업, 이름 등)를 모두 초기화합니다. (스탯은 유지)"""
 
-
-    @commands.command(name="전직")
-    async def advance_class(self, ctx):
-        """5레벨 도달 시 상위 직업으로 전직합니다."""
-        player_id = str(ctx.author.id)
-        all_data = load_data()
-        player_data = all_data.get(player_id)
-
-        if not player_data or not player_data.get("registered"):
-            return await ctx.send("먼저 `!등록`을 진행해주세요.")
-        
-        if player_data.get("advanced_class"):
-            return await ctx.send(f"이미 **{player_data['advanced_class']}**(으)로 전직하셨습니다.")
-
-        level = 1 + ((player_data['mental'] + player_data['physical']) // 5)
-        if level < 5:
-            return await ctx.send(f"전직은 5레벨부터 가능합니다. (현재 레벨: {level})")
-
-        base_class = player_data.get("class")
-        options = self.ADVANCED_CLASSES.get(base_class)
-        if not options:
-            return await ctx.send("오류: 유효하지 않은 기본 직업입니다.")
-
-        option_list = [f"`{name}` ({attr})" for attr, name in options.items()]
-        await ctx.send(f"**{ctx.author.display_name}**님, 전직할 상위 클래스를 선택해주세요.\n> {', '.join(option_list)}")
-
-        def check(m):
-            return m.author == ctx.author and m.channel == ctx.channel and m.content in options.values()
-
-        try:
-            msg = await self.bot.wait_for('message', check=check, timeout=60.0)
-            chosen_class = msg.content
-            
-            # 선택한 직업으로부터 속성 찾기
-            chosen_attribute = [attr for attr, name in options.items() if name == chosen_class][0]
-
-            player_data["advanced_class"] = chosen_class
-            player_data["attribute"] = chosen_attribute
-            save_data(all_data)
-
-            await ctx.send(f"🎉 축하합니다! **{chosen_class}**(으)로 전직했습니다! 이제 `{chosen_attribute}` 속성을 가지며 `!스킬` 명령어를 사용할 수 있습니다.")
-
-        except asyncio.TimeoutError:
-            await ctx.send("시간이 초과되어 전직이 취소되었습니다.")
 
 
     @commands.command(name="정신도전")
@@ -771,75 +719,7 @@ class GrowthCog(commands.Cog):
             await ctx.send("사용법: `!성장관리 [이름] [스탯종류] [+혹은-숫자]`\n> 예시: `!성장관리 홍길동 정신 +5`")
 
     
-    
 
-    @commands.command(name="전직변경")
-    @commands.is_owner()
-    async def change_advanced_class(self, ctx, target_name: str, *, new_class_name: str):
-        """[관리자용] 등록된 이름으로 유저의 상위 클래스를 강제로 변경하고, 기본 직업도 함께 변경합니다."""
-        
-        all_data = load_data()
-        
-        # 1. 이름으로 플레이어 찾기
-        target_id, target_data = None, None
-        for player_id, player_info in all_data.items():
-            if player_info.get("name") == target_name.strip('"'):
-                target_id = player_id
-                target_data = player_info
-                break
-        
-        if not target_data:
-            return await ctx.send(f"'{target_name}' 이름을 가진 플레이어를 찾을 수 없습니다.")
-
-        # 2. 변경할 상위 클래스가 존재하는지, 그리고 그에 맞는 기본 직업과 속성은 무엇인지 찾기
-        new_base_class, new_attribute = None, None
-        for base_class, options in self.ADVANCED_CLASSES.items():
-            for attr, adv_class in options.items():
-                if adv_class == new_class_name:
-                    new_base_class = base_class
-                    new_attribute = attr
-                    break
-            if new_base_class:
-                break
-        
-        if not new_base_class:
-            return await ctx.send(f"'{new_class_name}'(이)라는 상위 클래스는 존재하지 않습니다.")
-
-        # 3. 데이터 업데이트
-        old_base_class = target_data.get("class", "없음")
-        old_adv_class = target_data.get("advanced_class", "없음")
-        
-        all_data[target_id]["class"] = new_base_class
-        all_data[target_id]["advanced_class"] = new_class_name
-        all_data[target_id]["attribute"] = new_attribute
-        save_data(all_data)
-
-        # 4. 결과 알림
-        embed = discord.Embed(
-            title="✨ 전직 관리 완료 (전체 변경)",
-            description=f"**{target_name}**님의 직업을 성공적으로 변경했습니다.",
-            color=discord.Color.purple()
-        )
-        embed.add_field(name="대상", value=target_name, inline=True)
-        embed.add_field(name="기본 직업 변경", value=f"`{old_base_class}` → `{new_base_class}`", inline=False)
-        embed.add_field(name="상위 클래스 변경", value=f"`{old_adv_class}` → `{new_class_name}` ({new_attribute} 속성)", inline=False)
-        await ctx.send(embed=embed)
-
-
-
-    @change_advanced_class.error
-    async def change_ac_error(self, ctx, error):
-        if isinstance(error, commands.NotOwner):
-            await ctx.send("이 명령어는 봇 소유자만 사용할 수 있습니다.")
-        elif isinstance(error, commands.MissingRequiredArgument):
-            await ctx.send("사용법: `!전직변경 [이름] [상위클래스이름]`\n> 예시: `!전직변경 홍길동 캐스터`")
-        # ▼▼▼ 여기가 추가된 부분입니다 ▼▼▼
-        else:
-            # 터미널(screen)에만 자세한 오류 내용을 출력합니다. (디버깅용)
-            print(f"!전직변경 명령어에서 예상치 못한 오류 발생: {error}")
-            # 디스코드 채널에는 간단한 안내 메시지만 보냅니다.
-            await ctx.send("알 수 없는 오류가 발생하여 명령을 처리할 수 없습니다. 봇 소유자에게 문의해주세요.")
-        # ▲▲▲ 여기가 추가된 부분입니다 ▲▲▲
 
 
 # cogs/growth.py 의 GrowthCog 클래스 내부에 추가
