@@ -81,12 +81,14 @@ class PveBattle:
         player_data = load_data()[str(player_user.id)]
         level = 1 + ((player_data['mental'] + player_data['physical']) // 5); player_hp = max(1, level * 10 + player_data['physical'])
         equipped_gear = player_data.get("equipped_gear", []); gear_damage_bonus = sum(EQUIPMENT_EFFECTS.get(item, {}).get("final_damage_bonus", 0) for item in equipped_gear)
-
-        
         self.player_stats = { "id": player_user.id, "name": player_data['name'], "class": player_data['class'], "advanced_class": player_data.get("advanced_class"), "attribute": player_data.get("attribute"), "mental": player_data['mental'], "physical": player_data['physical'], "level": level, "hp": player_hp, "current_hp": player_hp, "pve_defense": 0, "color": int(player_data.get('color', '#FFFFFF')[1:], 16), "special_cooldown": 0, "effects": {}, "gear_damage_bonus": gear_damage_bonus }
         monster_template = MONSTER_DATA[monster_name]; difficulty = HUNTING_GROUNDS[hunting_ground_name]["difficulty"]
         avg_player_damage = (self.player_stats['physical'] + self.player_stats['mental']) / 2 + self.player_stats['level']
-        monster_hp = round(max(difficulty["min_hp"], avg_player_damage * random.uniform(*difficulty["hp_mult"]))); monster_ap = round(max(difficulty["min_ap"], self.player_stats['hp'] / random.uniform(*difficulty["ap_div"])))
+        
+        # ▼▼▼ 1번 문제 해결: int()를 사용해 정수로 변환 ▼▼▼
+        monster_hp = int(round(max(difficulty["min_hp"], avg_player_damage * random.uniform(*difficulty["hp_mult"]))))
+        monster_ap = int(round(max(difficulty["min_ap"], self.player_stats['hp'] / random.uniform(*difficulty["ap_div"]))))
+        
         self.monster_stats = { "name": monster_name, "level": level, "attribute": monster_template['attribute'], "defense": 0, "hp": monster_hp, "current_hp": monster_hp, "ap": monster_ap, "drops": monster_template['drops'] }
         self.current_turn = "player"
 
@@ -122,26 +124,20 @@ class PveBattle:
 
 
     async def monster_turn(self):
-        monster = self.monster_stats
-        player = self.player_stats
-        
-        action_roll = random.random()
-        log_message = ""
+        monster = self.monster_stats; player = self.player_stats
+        action_roll = random.random(); log_message = ""
         initial_defense = player.get('pve_defense', 0)
-
-        # ▼▼▼ is_strong_attack 변수를 여기서 선언합니다. ▼▼▼
         is_strong_attack = (action_roll >= 0.9)
         
-        # [행동 1: 방어 (30%)]
-        if 0.6 <= action_roll < 0.9:
-            defense_gain = round(monster['hp'] * 0.2)
+        if 0.6 <= action_roll < 0.9: # 방어
+            defense_gain = int(round(monster['hp'] * 0.2))
             monster['defense'] += defense_gain
             log_message = f"🛡️ **{monster['name']}**이(가) 방어 태세를 갖춥니다! (방어도 +{defense_gain})"
-        
-        # [행동 2: 공격 (일반 60%, 강한 공격 10%)]
-        else:
+        else: # 공격
             multiplier = 2.0 if is_strong_attack else 1.0
-            damage = max(1, monster['ap'] + random.randint(-monster['level'], monster['level'])) * multiplier
+            
+            # ▼▼▼ 2번 문제 해결: 모든 데미지를 정수(int)로 통일 ▼▼▼
+            damage = int(round(max(1, monster['ap'] + random.randint(-monster['level'], monster['level'])) * multiplier))
             
             defense_consumed = min(initial_defense, damage)
             final_damage = max(0, damage - initial_defense)
@@ -153,9 +149,26 @@ class PveBattle:
                 log_message = f"💥 **{monster['name']}**의 강한 공격! **{player['name']}**에게 **{final_damage}**의 치명적인 피해!"
             else:
                 log_message = f"👹 **{monster['name']}**의 공격! **{player['name']}**에게 **{final_damage}**의 피해!"
-
             if defense_consumed > 0:
                 log_message += f" (방어도 {defense_consumed} 흡수)"
+            # ▲▲▲ 2번 문제 해결 ▲▲▲
+
+        if player['current_hp'] <= 0:
+            await self.channel.send(embed=discord.Embed(description=log_message, color=0xDC143C))
+            await asyncio.sleep(1)
+            await self.end_battle(win=False, reason=f"{monster['name']}의 공격에 쓰러졌습니다...")
+            return
+
+        if player.get('special_cooldown', 0) > 0:
+            player['special_cooldown'] -= 1
+        
+        self.current_turn = "player"
+        embed = discord.Embed(title="몬스터의 턴 결과", description=log_message, color=player['color'])
+        embed.add_field(name=f"{player['name']}", value=f"HP: {player['current_hp']}/{player['hp']}", inline=True)
+        embed.add_field(name=f"{monster['name']}", value=f"HP: {monster['current_hp']}/{monster['hp']}", inline=True)
+        embed.set_footer(text="▶️ 당신의 턴입니다.")
+        await self.channel.send(embed=embed)
+        await self.start_turn_timer()
 
         # 2. 플레이어가 쓰러졌는지 확인
         if player['current_hp'] <= 0:
