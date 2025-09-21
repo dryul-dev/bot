@@ -487,20 +487,17 @@ class BattleCog(commands.Cog):
 
 
 
-# cogs/battle.py 의 BattleCog 클래스 내부
-
     @commands.command(name="공격")
     async def attack(self, ctx, target_user: discord.Member = None):
         battle, _ = await self.get_current_player_and_battle(ctx)
         if not battle: return
 
-        # --- PvE 로직 (헬퍼 함수 미사용) ---
+        # --- PvE 로직 ---
         if battle.battle_type == "pve":
             attacker = battle.player_stats
             target = battle.monster_stats
             attack_type = "근거리" if attacker['class'] == '검사' else ("근거리" if attacker.get('physical', 0) >= attacker.get('mental', 0) else "원거리")
             
-            # PvE는 별도의 간단한 데미지 계산식을 사용
             base_damage = attacker['physical'] + random.randint(0, attacker['mental']) if attack_type == "근거리" else attacker['mental'] + random.randint(0, attacker['physical'])
             final_damage = max(1, round(base_damage) + attacker.get('gear_damage_bonus', 0) - target.get('defense', 0))
             
@@ -509,22 +506,36 @@ class BattleCog(commands.Cog):
             battle.add_log(log_message)
             await ctx.send(log_message); await asyncio.sleep(1.5)
 
-        if target['current_hp'] <= 0:
-            # ▼▼▼ 여기가 수정된 부분입니다 ▼▼▼
-            if battle.battle_type == "pvp_team":
-                # 1. 리타이어 처리 함수를 먼저 호출하여 맵 상태를 업데이트
-                battle.handle_retirement(target)
-                
-                # 2. 게임이 끝났는지 확인
-                is_over = await battle.check_game_over()
-                
-                # 3. 게임이 끝나지 않았다면, 아이콘이 치워진 맵을 출력
-                if not is_over:
-                    await battle.display_board()
-                # 게임이 끝났다면, check_game_over 내부에서 승리 메시지를 보냄
-                else:
-                    if ctx.channel.id in self.active_battles:
+            # PvE 전용 후속 처리
+            if target['current_hp'] <= 0:
+                await battle.end_battle(win=True)
+            else:
+                await battle.monster_turn()
+            return # PvE 로직은 여기서 완전히 종료
+
+        # --- PvP 로직 ---
+        elif battle.battle_type in ["pvp_1v1", "pvp_team"]:
+            # 1. 공격자, 타겟, 사거리 등 기본 정보 설정
+            # ... (이전 답변의 완성된 PvP용 공격자/타겟/사거리 확인 로직) ...
+            
+            # 2. 기본 데미지만 계산 후 헬퍼 함수 호출
+            base_damage = attacker['physical'] + random.randint(0, attacker['mental']) if attack_type == "근거리" else attacker['mental'] + random.randint(0, attacker['physical'])
+            await self._apply_damage(battle, attacker, target, base_damage)
+
+            # 3. PvP 전용 후속 처리
+            if target['current_hp'] <= 0:
+                if battle.battle_type == "pvp_team":
+                    battle.handle_retirement(target)
+                    if await battle.check_game_over(): 
                         del self.active_battles[ctx.channel.id]
+                    else: 
+                        await battle.display_board()
+                else: # pvp_1v1
+                    battle.add_log(f"☠️ {target['name']}이(가) 쓰러졌습니다!")
+                    await battle.end_battle(ctx.author, f"{target['name']}이(가) 공격을 받고 쓰러졌습니다!")
+                    del self.active_battles[ctx.channel.id]
+            else:
+                await battle.handle_action_cost(1)
 
         # --- PvP 로직 (헬퍼 함수 사용) ---
         elif battle.battle_type in ["pvp_1v1", "pvp_team"]:

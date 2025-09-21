@@ -72,7 +72,7 @@ MARKET_ITEMS = {
 
 EQUIPMENT_EFFECTS = {
     "가죽 장갑": {"final_damage_bonus": 1},
-    "가죽 갑옷": {"final_damage_bonus": 1}
+    "가죽 갑옷": {"final_damage_bonus": 2}
 }
 
 class PveBattle:
