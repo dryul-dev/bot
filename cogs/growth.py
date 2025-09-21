@@ -514,6 +514,8 @@ class GrowthCog(commands.Cog):
         await ctx.send(embed=embed)
 
     
+# cogs/growth.py 의 GrowthCog 클래스 내부
+
     @commands.command(name="목표등록")
     async def register_goal(self, ctx, *, goal_name: str):
         """오늘의 목표를 등록합니다. (하루에 2번, 최대 10개)"""
@@ -524,52 +526,44 @@ class GrowthCog(commands.Cog):
         if not player_data or not player_data.get("registered"):
             return await ctx.send("먼저 `!등록`을 진행해주세요.")
 
-        # 글자 수 제한 확인
         if len(goal_name) > 10:
             return await ctx.send("목표는 공백 포함 10자 이내로 설정해주세요.")
 
-        today_kst_str = datetime.now(self.KST).strftime('%Y-%m-%d')
-        
-        # 1. 유저의 일일 목표 정보를 불러옵니다.
-        daily_info = player_data.get("daily_goal_info", {"date": None, "count": 0})
-        last_date = daily_info.get("date")
-        daily_count = daily_info.get("count", 0)
-
-        # 2. 마지막 등록일이 오늘이 아니라면, 카운트를 0으로 초기화합니다.
-        if last_date != today_kst_str:
-            daily_count = 0
-
-        # 3. 초기화된 카운트를 기준으로 2개가 넘었는지 확인합니다.
-        if daily_count >= 2:
-            return await ctx.send("목표는 하루에 두 번까지만 등록할 수 있습니다. 내일 다시 시도해주세요.")
-        
-        # 4. 모든 검사를 통과했으면 목표를 추가합니다.
-        goals.append(goal_name)
-        player_data["goals"] = goals
-        
-        # 5. 오늘 날짜와 함께, 증가된 카운트를 저장합니다.
-        player_data["daily_goal_info"] = {"date": today_kst_str, "count": daily_count + 1}
-        
-        save_data(all_data)
-
-        # 마지막 등록 날짜가 오늘이 아니라면, 횟수를 초기화합니다.
-        if last_date != today_kst_str:
-            daily_count = 0
-
-        # 하루 등록 제한(2개)을 확인합니다.
-        if daily_count >= 2:
-            return await ctx.send("목표는 하루에 두 번까지만 등록할 수 있습니다. 내일 다시 시도해주세요.")
-        # ▲▲▲ 여기가 수정된 부분입니다 ▲▲...
         goals = player_data.get("goals", [])
         if len(goals) >= 10:
             return await ctx.send("최대 10개의 목표만 저장할 수 있습니다. `!목표달성`으로 공간을 확보해주세요.")
 
+        # --- ▼▼▼ 여기가 수정된 부분입니다 ▼▼▼ ---
+        # 1. 유저의 시간대를 불러와 오늘 날짜를 계산합니다.
+        user_tz_str = player_data.get("timezone", "Asia/Seoul")
+        try:
+            user_tz = pytz.timezone(user_tz_str)
+        except pytz.UnknownTimeZoneError:
+            user_tz = self.KST
+        today_local_str = datetime.now(user_tz).strftime('%Y-%m-%d')
+        
+        # 2. 유저의 일일 목표 정보를 불러옵니다.
+        daily_info = player_data.get("daily_goal_info", {})
+        last_date = daily_info.get("date")
+        daily_count = daily_info.get("count", 0)
+
+        # 3. 마지막 등록일이 오늘이 아니라면, 카운트를 0으로 초기화합니다.
+        if last_date != today_local_str:
+            daily_count = 0
+
+        # 4. 초기화된 카운트를 기준으로 2개가 넘었는지 확인합니다.
+        if daily_count >= 2:
+            return await ctx.send(f"목표는 현지 시간 기준 하루에 두 번까지만 등록할 수 있습니다. ({today_local_str})")
+        
+        # 5. 모든 검사를 통과했으면 목표를 추가하고 정보를 저장합니다.
         goals.append(goal_name)
         player_data["goals"] = goals
-        player_data["last_goal_date"] = today_kst_str
+        player_data["daily_goal_info"] = {"date": today_local_str, "count": daily_count + 1}
+        
         save_data(all_data)
+        # --- ▲▲▲ 여기가 수정된 부분입니다 ▲▲▲ ---
 
-        await ctx.send(f"✅ 새로운 목표가 등록되었습니다: **{goal_name}**")
+        await ctx.send(f"✅ 새로운 목표가 등록되었습니다: **{goal_name}** (오늘 {daily_count + 1}/2번째)")
 
 
 
@@ -602,7 +596,7 @@ class GrowthCog(commands.Cog):
     @commands.command(name="목표달성")
     async def achieve_goal(self, ctx, goal_number: int):
         """번호가 부여된 목표를 달성 처리합니다."""
-        if not (1 <= goal_number <= 5):
+        if not (1 <= goal_number <= 10):
             return await ctx.send("1번에서 10번까지의 목표만 달성할 수 있습니다.")
 
         all_data = load_data()
@@ -658,7 +652,7 @@ class GrowthCog(commands.Cog):
     @commands.command(name="목표중단")
     async def abandon_goal(self, ctx, goal_number: int):
         """등록된 목표를 중단하고, 격려 포인트를 받습니다."""
-        if not (1 <= goal_number <= 5):
+        if not (1 <= goal_number <= 10):
             return await ctx.send("1번에서 10번까지의 목표만 중단할 수 있습니다.")
 
         all_data = load_data()
