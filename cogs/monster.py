@@ -77,7 +77,6 @@ EQUIPMENT_EFFECTS = {
 
 class PveBattle:
     def __init__(self, channel, player_user, active_battles_ref, hunting_ground_name, monster_name):
-        def __init__(self, channel, player_user, active_battles_ref, hunting_ground_name, monster_name):
         self.channel = channel
         self.player_user = player_user
         self.active_battles = active_battles_ref
@@ -167,7 +166,7 @@ class PveBattle:
             # 만약 모든 아이템의 확률을 뚫고 아무것도 당첨되지 않았다면,
             # 마지막 아이템을 '꽝' 대신 지급합니다. (선택사항)
             if not materials_won and self.monster_stats['drops']:
-                 materials_won.append(self.monster_stats['drops'][-1]['name'])
+                    materials_won.append(self.monster_stats['drops'][-1]['name'])
             all_data = load_data(); 
             player_data = all_data.get(str(self.player_user.id))
             if player_data:
@@ -190,11 +189,12 @@ class PveBattle:
                     embed.add_field(name="획득 재료", value="\n".join(f"- {mat}" for mat in materials_won), inline=True)
                 await self.channel.send(embed=embed)
         else: await self.channel.send(reason if reason else "사냥에 실패했습니다. 보건실에 갑시다.")
-# cogs/monster.py 의 PveBattle 클래스 내부
+    # cogs/monster.py 의 PveBattle 클래스 내부
+    # cogs/monster.py 의 PveBattle 클래스 내부
+
 # cogs/monster.py 의 PveBattle 클래스 내부
 
     async def monster_turn(self):
-        """몬스터의 턴을 진행하고, 결과를 하나의 Embed로 통합하여 보여줍니다."""
         monster = self.monster_stats
         player = self.player_stats
         
@@ -202,41 +202,37 @@ class PveBattle:
         log_message = ""
         initial_defense = player.get('pve_defense', 0)
 
-        # 1. 몬스터 행동 결정 및 데미지/방어 계산
-        if action_roll < 0.6: # 일반 공격
-            initial_damage = max(1, monster['ap'] + random.randint(-monster['level'], monster['level']))
-            
-            # 방어도 적용 및 소모
-            final_damage = max(0, initial_damage - initial_defense)
-            player['pve_defense'] = max(0, initial_defense - initial_damage)
-            
-            # 체력 감소
-            player['current_hp'] = max(0, player['current_hp'] - final_damage)
-            
-            log_message = f"👹 **{monster['name']}**의 공격! **{player['name']}**에게 **{final_damage}**의 피해!"
-
-        elif action_roll < 0.9: # 방어
-            defense_gain = round(monster['hp'] * 0.2)
+        # 1. 몬스터 행동 결정
+        
+        # [행동 1: 방어 (30%)]
+        if 0.6 <= action_roll < 0.9:
+            defense_gain = int(round(monster['hp'] * 0.2))
             monster['defense'] += defense_gain
             log_message = f"🛡️ **{monster['name']}**이(가) 방어 태세를 갖춥니다! (방어도 +{defense_gain})"
         
-        else: # 강한 공격
-            initial_damage = max(1, monster['ap'] + random.randint(-monster['level'], monster['level'])) * 2
+        # [행동 2: 공격 (일반 60%, 강한 공격 10%)]
+        else:
+            is_strong_attack = (action_roll >= 0.9)
+            multiplier = 2.0 if is_strong_attack else 1.0
             
-            # 방어도 적용 및 소모
-            final_damage = max(0, initial_damage - initial_defense)
-            player['pve_defense'] = max(0, initial_defense - initial_damage)
+            # 데미지 계산 및 적용
+            damage = int(round(max(1, monster['ap'] + random.randint(-monster['level'], monster['level'])) * multiplier))
+            final_damage = max(0, damage - initial_defense)
+            defense_remaining = max(0, initial_defense - damage)
 
-            # 체력 감소
+            player['pve_defense'] = defense_remaining
             player['current_hp'] = max(0, player['current_hp'] - final_damage)
             
-            log_message = f"💥 **{monster['name']}**의 강한 공격! **{player['name']}**에게 **{final_damage}**의 치명적인 피해!"
+            # 로그 메시지 생성
+            if is_strong_attack:
+                log_message = f"💥 **{monster['name']}**의 강한 공격! **{player['name']}**에게 **{final_damage}**의 치명적인 피해!"
+            else:
+                log_message = f"👹 **{monster['name']}**의 공격! **{player['name']}**에게 **{final_damage}**의 피해!"
+            
+            if initial_defense > 0:
+                log_message += f" (방어도 {initial_defense} → {defense_remaining})"
 
-        # 방어도가 있었던 공격에만 로그 추가
-        if initial_defense > 0 and '피해' in log_message:
-            log_message += f" (방어도 {initial_defense} → {player['pve_defense']})"
-        
-        # 2. 플레이어가 쓰러졌는지 확인
+        # 2. 플레이어 생존 확인
         if player['current_hp'] <= 0:
             await self.channel.send(embed=discord.Embed(description=log_message, color=0xDC143C))
             await asyncio.sleep(1)
