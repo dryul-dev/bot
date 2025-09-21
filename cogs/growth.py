@@ -84,7 +84,8 @@ class GrowthCog(commands.Cog):
                 "school_points": 0, "inventory": [],
                 "goals": [], "daily_goal_info": {},
                 "today_blessing": None,
-                "last_blessing_date": None
+                "last_blessing_date": None,
+                "timezone": None
             }
             save_data(all_data)
             await ctx.send("🎉 등록이 완료되었습니다!")
@@ -216,7 +217,8 @@ class GrowthCog(commands.Cog):
             'challenge_registered_today': False,
             'rest_buff_active': False,
             'today_blessing': None,
-            'last_blessing_date': None
+            'last_blessing_date': None,
+            'timezone': None
             
         }
         # ▲▲▲ 여기가 수정된 부분입니다 ▲▲▲
@@ -896,16 +898,9 @@ class GrowthCog(commands.Cog):
             is_updated_this_loop = False
             
             # --- 각 필드 점검 및 업데이트 ---
-            if 'pve_inventory' in player_data and isinstance(player_data['pve_inventory'], list):
-                old_list = player_data['pve_inventory']
-                new_dict = {}
-                for item in old_list: new_dict[item] = new_dict.get(item, 0) + 1
-                player_data['pve_inventory'] = new_dict
-                is_updated_this_loop = True
-
-            if 'pve_item_bag' not in player_data:
-                player_data['pve_item_bag'] = {}
-                is_updated_this_loop = True
+            if 'timezone' not in player_data:
+                player_data.setdefault('timezone', None)
+                updated = True
 
             if 'last_goal_date' in player_data and 'daily_goal_info' not in player_data:
                 last_date = player_data['last_goal_date']
