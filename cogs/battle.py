@@ -458,12 +458,32 @@ class BattleCog(commands.Cog):
     async def move(self, ctx, *directions):
         battle, _ = await self.get_current_player_and_battle(ctx)
         if not battle: return
-        if battle.battle_type == "pve": return await ctx.send("사냥 중에는 이동할 수 없습니다.")
-        if battle.turn_actions_left <= 0: return await ctx.send("행동력이 없습니다.", delete_after=10)
+
+        if battle.battle_type == "pve":
+            return await ctx.send("사냥 중에는 이동할 수 없습니다.")
+
         p_stats = battle.players.get(ctx.author.id) if battle.battle_type == "pvp_team" else battle.get_player_stats(ctx.author)
-        effects = p_stats.get('effects', {}); mobility_modifier = effects.get('mobility_modifier', 0)
-        base_mobility = 2 if p_stats['class'] == '검사' else 1; final_mobility = max(1, base_mobility + mobility_modifier)
-        if not (1 <= len(directions) <= final_mobility): return await ctx.send(f"👉 현재 이동력은 **{final_mobility}**입니다. 1~{final_mobility}개의 방향을 입력해주세요.", delete_after=10)
+        
+        # 이동 불가 효과가 있는지 확인
+        if p_stats.get('effects', {}).get('cannot_move'):
+            return await ctx.send("움직임이 봉쇄되어 이동할 수 없습니다!")
+
+        if battle.turn_actions_left <= 0:
+            return await ctx.send("행동력이 없습니다.", delete_after=10)
+        
+        # ▼▼▼ 여기가 수정된 부분입니다 ▼▼▼
+        # 1. 플레이어의 효과(버프/디버프)를 확인합니다.
+        effects = p_stats.get('effects', {})
+        mobility_modifier = effects.get('mobility_modifier', 0)
+        
+        # 2. 기본 이동력에 효과를 더해 최종 이동력을 계산합니다.
+        base_mobility = 2 if p_stats['class'] == '검사' else 1
+        final_mobility = max(1, base_mobility + mobility_modifier) # 최소 이동력은 1
+        # ▲▲▲ 여기가 수정된 부분입니다 ▲▲▲
+
+        if not (1 <= len(directions) <= final_mobility):
+            return await ctx.send(f"👉 현재 이동력은 **{final_mobility}**입니다. 1~{final_mobility}개의 방향을 입력해주세요.", delete_after=10)
+        
         current_pos = p_stats['pos']; path = [current_pos]
         for direction in directions:
             next_pos = path[-1]
@@ -681,14 +701,22 @@ class BattleCog(commands.Cog):
             else: return await ctx.send("잘못된 스킬 번호입니다.", delete_after=10)
 
         elif advanced_class == "커맨더":
-            if skill_number == 1: # 공격 멀티플라이어 1.5의 근거리 공격
-                if battle.get_distance(attacker['pos'], target['pos']) != 1: return await ctx.send("❌ 근거리 공격 사거리가 아닙니다.")
 
-                # 1. 기본 데미지만 계산
+            if skill_number == 1:
+                if battle.get_distance(attacker['pos'], target['pos']) != 1: 
+                    return await ctx.send("❌ 근거리 공격 사거리가 아닙니다.")
+                
+                # 1. 1.5배 강화된 기본 공격을 먼저 실행합니다.
                 base_damage = attacker['physical'] + random.randint(0, attacker['mental'])
-
-                # 2. 1.5의 배율을 헬퍼 함수에 전달하여 모든 계산을 맡김
                 await self._apply_damage(battle, attacker, target, base_damage, base_multiplier=1.5)
+
+                # 2. 상성 우위일 경우, 추가 데미지를 부여합니다.
+                advantages = {'Wit': 'Gut', 'Gut': 'Heart', 'Heart': 'Wit'}
+                if attacker.get('attribute') and target.get('attribute'):
+                    if advantages.get(attacker['attribute']) == target.get('attribute'):
+                        bonus_damage = attacker['level'] * 2
+                        target['current_hp'] = max(0, target['current_hp'] - bonus_damage)
+                        battle.add_log(f"📜 커맨더의 전술! 상성 우위로 **{bonus_damage}**의 추가 피해!")
                         
             elif skill_number == 2: # 자신 또는 팀원 이동
                 # ▼▼▼ 여기가 수정된 부분입니다 ▼▼▼
@@ -757,8 +785,9 @@ class BattleCog(commands.Cog):
                     # 2. 헬퍼 함수를 호출합니다.
                 await self._apply_damage(battle, attacker, target, base_damage)
 
-            elif skill_number == 2: target.setdefault('effects', {})['mobility_modifier'] = -1; battle.add_log(f"🌀 {attacker['name']}이(가) {target['name']}의 다음 턴 이동력을 1 감소!")
-            else: return await ctx.send("잘못된 스킬 번호입니다.")
+            elif skill_number == 2: # 대상의 다음 턴 이동 명령어 사용 불가
+                target.setdefault('effects', {})['cannot_move'] = True
+                battle.add_log(f"⛓️ {attacker['name']}이(가) {target['name']}의 움직임을 봉쇄했습니다!")
 
         elif advanced_class == "힐러":
             if skill_number == 1: heal_amount = round(target['max_hp'] * 0.4); target['current_hp'] = min(target['max_hp'], target['current_hp'] + heal_amount); battle.add_log(f"💖 {attacker['name']}이(가) {target['name']}의 체력을 {heal_amount}만큼 회복!")
