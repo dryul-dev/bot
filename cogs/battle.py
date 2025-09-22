@@ -233,37 +233,62 @@ class BattleCog(commands.Cog):
         self.bot = bot
         self.active_battles = bot.active_battles
 
-    async def _apply_damage(self, battle, attacker, target, base_damage):
-            """단순화된 PvP 데미지 계산 및 적용 헬퍼 함수"""
-            multiplier = 1.0
-            log_notes = []
+# cogs/battle.py 의 BattleCog 클래스 내부
 
-            # 1. 특수 능력 버프 또는 크리티컬 확인
-            if attacker.get('attack_buff_stacks', 0) > 0:
-                multiplier = 1.5
-                attacker['attack_buff_stacks'] -= 1
-                log_notes.append(f"✨ 강화된 공격({multiplier}배)!")
-            elif random.random() < 0.10: # 기본 크리티컬 10%
-                multiplier = 2.0
-                log_notes.append(f"💥 치명타({multiplier}배)!")
+    async def _apply_damage(self, battle, attacker, target, base_damage):
+        """단순화된 데미지 계산 헬퍼 함수"""
+        multiplier = 1.0
+        log_notes = []
+        attacker_effects = attacker.get('effects', {})
+
+        # 1. 특수 능력 버프 또는 크리티컬 확인
+        if attacker.get('attack_buff_stacks', 0) > 0:
+            multiplier = 1.5; attacker['attack_buff_stacks'] -= 1
+            log_notes.append(f"✨ 강화된 공격(1.5배)!")
+        
+        # ▼▼▼ 여기가 수정된 부분입니다 ▼▼▼
+        elif attacker_effects.pop('guaranteed_crit', False): # Gut 스킬 효과
+            multiplier = 2.0
+            log_notes.append(f"💥 치명타 확정!")
+        # ▲▲▲ 여기가 수정된 부분입니다 ▲▲▲
+
+        elif random.random() < 0.10: # 기본 크리티컬 10%
+            multiplier = 2.0
+            log_notes.append(f"💥 치명타(2배)!")
+        
+        total_damage = round(base_damage * multiplier)
+
+        # 상성 데미지 계산
+        attribute_damage = 0
+        advantages = {'Wit': 'Gut', 'Gut': 'Heart', 'Heart': 'Wit'}
+        if attacker.get('attribute') and target.get('attribute'):
+            # ▼▼▼ 여기가 수정된 부분입니다 ▼▼▼
+            attr_multiplier = attacker_effects.pop('attribute_multiplier', 1) # Wit 스킬 효과
             
-            # 2. 방어도 계산 및 소모
-            total_damage = round(base_damage * multiplier)
-            defense = target.get('defense', 0)
-            final_damage = max(0, total_damage - defense)
-            defense_remaining = max(0, defense - total_damage)
-            target['defense'] = defense_remaining
-            
-            # 3. 최종 데미지 적용 및 로그 생성
-            target['current_hp'] = max(0, target['current_hp'] - final_damage)
-            
-            log_message = f"💥 {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해!"
-            if log_notes:
-                log_message += " " + " ".join(log_notes)
-            if defense > 0:
-                log_message += f" (방어도 {defense} → {defense_remaining})"
-            
-            battle.add_log(log_message)
+            if advantages.get(attacker['attribute']) == target['attribute']:
+                bonus = random.randint(0, attacker['level'] * 2) * attr_multiplier
+                attribute_damage += bonus
+                log_notes.append(f"👍 상성 우위 (+{bonus})")
+            elif advantages.get(target['attribute']) == attacker['attribute']:
+                penalty = random.randint(0, attacker['level'] * 2) * attr_multiplier
+                attribute_damage -= penalty
+                log_notes.append(f"👎 상성 열세 (-{penalty})")
+        
+        total_damage += attribute_damage
+        # ▲▲▲ 여기가 수정된 부분입니다 ▲▲▲
+
+        # 방어도 계산 및 소모
+        defense = target.get('defense', 0)
+        final_damage = max(0, total_damage - defense)
+        defense_remaining = max(0, defense - total_damage)
+        target['defense'] = defense_remaining
+        
+        # 최종 데미지 적용 및 로그 생성
+        target['current_hp'] = max(0, target['current_hp'] - final_damage)
+        log_message = f"💥 {attacker['name']}이(가) {target['name']}에게 **{final_damage}**의 피해!"
+        if log_notes: log_message += " " + " ".join(log_notes)
+        if defense > 0: log_message += f" (방어도 {defense} → {defense_remaining})"
+        battle.add_log(log_message)
 #============================================================================================================================
 
     @commands.command(name="대결")
@@ -455,7 +480,7 @@ class BattleCog(commands.Cog):
         p_stats = battle.players.get(ctx.author.id) if battle.battle_type == "pvp_team" else battle.get_player_stats(ctx.author)
         
         if p_stats.get('special_cooldown', 0) > 0: 
-            return await ctx.send(f"쿨타임이 {p_stats['special_cooldown']}턴 남았습니다.", delete_after=10)
+            return await ctx.send(f"스킬/특수 능력의 쿨타임이 {p_stats['special_cooldown']}턴 남았습니다.", delete_after=10)
 
         # 기본 직업별 특수 능력
         player_class = p_stats['class']
@@ -498,7 +523,57 @@ class BattleCog(commands.Cog):
 
 #============================================================================================================================
 
- 
+# cogs/battle.py 의 BattleCog 클래스 내부
+
+    @commands.command(name="스킬")
+    async def use_skill(self, ctx, target_user: discord.Member = None):
+        battle, _ = await self.get_current_player_and_battle(ctx)
+        if not battle: return
+
+        if battle.turn_actions_left <= 0: return await ctx.send("행동력이 없습니다.", delete_after=10)
+        
+        attacker = battle.players.get(ctx.author.id) if battle.battle_type == "pvp_team" else battle.get_player_stats(ctx.author)
+        
+        player_attribute = attacker.get("attribute")
+        if not player_attribute: return await ctx.send("속성을 부여받은 후에 스킬을 사용할 수 있습니다. (`!속성부여`)")
+
+        if attacker.get('special_cooldown', 0) > 0: return await ctx.send(f"스킬/특수 능력의 쿨타임이 {attacker['special_cooldown']}턴 남았습니다.", delete_after=10)
+
+        targets_to_affect = []
+        if battle.battle_type == "pvp_team":
+            team_ids = battle.team_a_ids if attacker['id'] in battle.team_a_ids else battle.team_b_ids
+            targets_to_affect = [battle.players[pid] for pid in team_ids]
+        else: # pvp_1v1
+            targets_to_affect.append(attacker)
+
+        # 2. 속성에 따라 결정된 대상들에게 효과를 적용합니다.
+        if player_attribute == "Gut":
+            battle.add_log(f"✊ {attacker['name']}이(가) Gut 속성의 스킬을 사용합니다!")
+            for p_stat in targets_to_affect:
+                p_stat.setdefault('effects', {})['guaranteed_crit'] = True
+            battle.add_log("모든 아군의 다음 공격이 치명타로 적용됩니다!")
+
+        elif player_attribute == "Wit":
+            battle.add_log(f"🧐 {attacker['name']}이(가) Wit 속성의 스킬을 사용합니다!")
+            for p_stat in targets_to_affect:
+                p_stat.setdefault('effects', {})['attribute_multiplier'] = 3
+            battle.add_log("모든 아군의 다음 공격 상성 효과가 3배로 증폭됩니다!")
+
+        elif player_attribute == "Heart":
+            battle.add_log(f"💚 {attacker['name']}이(가) Heart 속성의 스킬을 사용합니다!")
+            healed_players = []
+            for p_stat in targets_to_affect:
+                heal_amount = round(p_stat['max_hp'] * 0.3)
+                p_stat['current_hp'] = min(p_stat['max_hp'], p_stat['current_hp'] + heal_amount)
+                healed_players.append(f"{p_stat['name']}(+{heal_amount})")
+            battle.add_log(f"아군 전체의 체력이 회복되었습니다. ({', '.join(healed_players)})")
+
+        # --- PvP 스킬 사용 후 공통 처리 ---
+        attacker['special_cooldown'] = 2
+        await battle.handle_action_cost(1)
+
+        # 이 스킬들은 직접적인 데미지를 주지 않으므로, 전투 종료 확인 로직이 필요 없습니다.
+
 #============================================================================================================================
 
 

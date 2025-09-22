@@ -85,7 +85,8 @@ class GrowthCog(commands.Cog):
                 "goals": [], "daily_goal_info": {},
                 "today_blessing": None,
                 "last_blessing_date": None,
-                "timezone": None
+                "timezone": None,
+                "attribute": None 
             }
             save_data(all_data)
             await ctx.send("🎉 등록이 완료되었습니다!")
@@ -134,7 +135,8 @@ class GrowthCog(commands.Cog):
         embed.add_field(name="직업", value=display_class, inline=True) # 수정된 display_class 변수 사용
         embed.add_field(name="레벨", value=f"**{level}**", inline=True)
         embed.add_field(name="대표 이모지", value=player_data.get('emoji', '❓'), inline=True)
-        
+        if player_data.get("attribute"):
+            embed.add_field(name="속성", value=player_data.get("attribute"), inline=True)
         # 스탯 정보 필드
         embed.add_field(name="🧠 정신", value=f"`{mental}`", inline=True)
         embed.add_field(name="💪 육체", value=f"`{physical}`", inline=True)
@@ -246,6 +248,43 @@ class GrowthCog(commands.Cog):
         await ctx.send(f"✅ **{ctx.author.display_name}**님의 모든 데이터가 성공적으로 초기화되었습니다. `!등록` 명령어를 사용해 새로운 여정을 시작하세요!")
         """자신의 프로필 정보(직업, 이름 등)를 모두 초기화합니다. (스탯은 유지)"""
 
+
+# cogs/growth.py 의 GrowthCog 클래스 내부에 추가
+
+    @commands.command(name="속성부여")
+    async def grant_attribute(self, ctx):
+        """5레벨 도달 시 Gut, Wit, Heart 중 하나의 속성을 부여받습니다."""
+        all_data = load_data()
+        player_id = str(ctx.author.id)
+        player_data = all_data.get(player_id)
+
+        if not player_data or not player_data.get("registered"):
+            return await ctx.send("먼저 `!등록`을 진행해주세요.")
+        
+        if player_data.get("attribute") is not None:
+            return await ctx.send(f"이미 `{player_data['attribute']}` 속성을 부여받았습니다.")
+
+        level = 1 + ((player_data.get('mental', 0) + player_data.get('physical', 0)) // 5)
+        if level < 5:
+            return await ctx.send(f"속성 부여는 5레벨부터 가능합니다. (현재 레벨: {level})")
+
+        attributes = ["Gut", "Wit", "Heart"]
+        await ctx.send(f"부여받을 속성을 선택해주세요. (30초 안에 입력)\n> `{'`, `'.join(attributes)}`")
+
+        def check(m):
+            return m.author == ctx.author and m.channel == ctx.channel and m.content.title() in attributes
+
+        try:
+            msg = await self.bot.wait_for('message', check=check, timeout=30.0)
+            chosen_attribute = msg.content.title() # Gut, Wit, Heart 첫 글자 대문자로 통일
+
+            player_data["attribute"] = chosen_attribute
+            save_data(all_data)
+
+            await ctx.send(f"✅ **{chosen_attribute}** 속성이 부여되었습니다! 이제 당신의 행동은 새로운 힘을 갖게 될 것입니다.")
+
+        except asyncio.TimeoutError:
+            await ctx.send("시간이 초과되어 속성 부여가 취소되었습니다.")
 
 
     @commands.command(name="시간대설정")
@@ -962,6 +1001,10 @@ class GrowthCog(commands.Cog):
 
             if 'last_daily_reset_date' not in player_data:
                 player_data.setdefault('last_daily_reset_date', "2000-01-01")
+                is_updated_this_loop = True
+
+            if 'attribute' not in player_data:
+                player_data.setdefault('attribute', None)
                 is_updated_this_loop = True
             
             if is_updated_this_loop:

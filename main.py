@@ -27,7 +27,7 @@ def save_data(data):
 # main.py
 
 # 일일 초기화 태스크 (유저 시간대별 오전 2시 기준)
-@tasks.loop(minutes=10) # 10분마다 모든 유저를 확인
+@tasks.loop(minutes=30) # 30분마다 모든 유저를 확인
 async def daily_reset_task():
     all_data = load_data()
     data_changed = False
