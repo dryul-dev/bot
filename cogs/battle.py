@@ -225,7 +225,7 @@ class TeamBattle(Battle):
         for winner_id in winner_ids:
             winner_id_str = str(winner_id)
             if winner_id_str in all_data:
-                all_data[winner_id_str]['school_points'] = all_data[winner_id_str].get('school_points', 0) + 15
+                all_data[winner_id_str]['school_points'] = all_data[winner_id_str].get('school_points', 0) + 20
                 winner_name = self.players[winner_id]['name']; point_log.append(f"{winner_name}: +20P")
         save_data(all_data)
         winner_representative_stats = self.players[winner_ids[0]]
@@ -250,7 +250,7 @@ class BattleCog(commands.Cog):
         # 1. 특수 능력 버프 또는 크리티컬 확인
         if attacker.get('attack_buff_stacks', 0) > 0:
             multiplier = 1.5; attacker['attack_buff_stacks'] -= 1
-            log_notes.append(f"✨ 강화된 공격(1.5배)!")
+            log_notes.append(f"✨ 강화된 공격!")
         
         # ▼▼▼ 여기가 수정된 부분입니다 ▼▼▼
         elif attacker_effects.pop('guaranteed_crit', False): # Gut 스킬 효과
@@ -260,7 +260,7 @@ class BattleCog(commands.Cog):
 
         elif random.random() < 0.10: # 기본 크리티컬 10%
             multiplier = 2.0
-            log_notes.append(f"💥 치명타(2배)!")
+            log_notes.append(f"💥 치명타!")
         
         total_damage = round(base_damage * multiplier)
 
