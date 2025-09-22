@@ -768,13 +768,23 @@ class GrowthCog(commands.Cog):
         goal_to_abandon = goals[goal_number - 1]
 
         # 사용자에게 재확인
-        await ctx.send(f"**'{goal_to_abandon}'** 목표를 정말로 중단하시겠습니까? (30초 안에 `예` 입력)")
-        def check(m): return m.author == ctx.author and m.channel == ctx.channel and m.content.lower() == '예'
+        await ctx.send(f"**'{goal_to_abandon}'** 목표를 정말로 중단하시겠습니까? (30초 안에 `예` 또는 `아니오` 입력)")
+        
+        # ▼▼▼ 여기가 수정된 부분입니다 ▼▼▼
+        # 1. check 함수가 '예', '아니오'를 모두 유효한 응답으로 인식하게 합니다.
+        def check(m): 
+            return m.author == ctx.author and m.channel == ctx.channel and m.content.lower() in ['예', '아니오']
+        
         try:
-            await self.bot.wait_for('message', check=check, timeout=30.0)
+            # 2. 사용자의 응답 메시지(msg)를 받아옵니다.
+            msg = await self.bot.wait_for('message', check=check, timeout=30.0)
+
+            # 3. 응답이 '아니오'일 경우, 취소 메시지를 보내고 함수를 종료합니다.
+            if msg.content.lower() == '아니오':
+                return await ctx.send("작업이 취소되었습니다.")
+                
         except asyncio.TimeoutError:
             return await ctx.send("시간이 초과되어 목표 중단이 취소되었습니다.")
-
         # 목표 목록에서 제거
         abandoned_goal = goals.pop(goal_number - 1)
         player_data["goals"] = goals

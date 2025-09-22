@@ -35,10 +35,16 @@ class Battle:
         self.turn_actions_left = 2
 
     def _setup_player_stats(self, all_data, user):
-        player_data = all_data[str(user.id)]
-        level = 1 + ((player_data.get('mental', 0) + player_data.get('physical', 0)) // 5)
-        max_hp = max(1, level * 10 + player_data.get('physical', 0))
-        return {"id": user.id, "name": player_data['name'], "emoji": player_data['emoji'], "class": player_data['class'], "defense": 0, "color": int(player_data.get('color', '#FFFFFF')[1:], 16), "mental": player_data.get('mental', 0), "physical": player_data.get('physical', 0), "level": level, "max_hp": max_hp, "current_hp": max_hp, "pos": -1, "special_cooldown": 0, "attack_buff_stacks": 0}
+        player_id = str(user.id)
+        base_stats = all_data[player_id]
+        level = 1 + ((base_stats.get('mental', 0) + base_stats.get('physical', 0)) // 5)
+        max_hp = max(1, level * 10 + base_stats.get('physical', 0))
+        if base_stats.get("rest_buff_active", False):
+            hp_buff = level * 2; max_hp += hp_buff
+            self.add_log(f"🌙 {base_stats['name']}이(가) 휴식 효과로 최대 체력이 {hp_buff} 증가합니다!")
+            all_data[player_id]["rest_buff_active"] = False; save_data(all_data)
+        
+        return {"id": user.id, "name": base_stats['name'], "emoji": base_stats['emoji'], "class": base_stats['class'], "attribute": base_stats.get("attribute"), "advanced_class": base_stats.get("advanced_class"), "defense": 0, "effects": {}, "color": int(base_stats.get('color', '#FFFFFF')[1:], 16), "mental": base_stats.get('mental', 0), "physical": base_stats.get('physical', 0), "level": level, "max_hp": max_hp, "current_hp": max_hp, "pos": -1, "special_cooldown": 0, "attack_buff_stacks": 0}
 
     def get_player_stats(self, user): return self.p1_stats if user.id == self.p1_user.id else self.p2_stats
     def get_opponent_stats(self, user): return self.p2_stats if user.id == self.p1_user.id else self.p1_stats
