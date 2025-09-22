@@ -69,7 +69,7 @@ class SchoolCog(commands.Cog):
         embed = discord.Embed(title=f"🎒 {player_data['name']}의 주머니", color=int(player_data['color'][1:], 16))
         embed.add_field(name="🎓 스쿨 포인트", value=f"`{points}` P", inline=False)
         item_list = "\n".join(f"- {item}" for item in inventory) if inventory else "아직 아이템이 없습니다."
-        embed.add_field(name=f"📦 보유 아이템 ({len(inventory)}/8)", value=item_list, inline=False)
+        embed.add_field(name=f"📦 보유 아이템 ({len(inventory)}/10)", value=item_list, inline=False)
         await ctx.send(embed=embed)
 
     @commands.command(name="교내상점")

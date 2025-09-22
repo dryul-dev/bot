@@ -448,17 +448,19 @@ class GrowthCog(commands.Cog):
         try:
             user_tz = pytz.timezone(user_tz_str)
         except pytz.UnknownTimeZoneError:
-            user_tz = self.KST # 잘못된 값이 저장된 경우 KST로
-
-        now_local = datetime.now(user_tz).time()
-
-        if not (time(16, 0) <= now_local < time(2, 0)):
-            embed = discord.Embed(title="❌ 도전 완료 실패", description=f"**도전 완료는 오후 4시부터 오전 2시까지만 가능합니다.**\n(현재 시간: {now_local.strftime('%H:%M')})", color=discord.Color.red())
+            user_tz = self.KST
+            
+        # ▼▼▼ 여기가 수정된 부분입니다 ▼▼▼
+        # .time() 대신, 시간(hour)을 직접 비교하기 위해 datetime 객체 전체를 사용합니다.
+        now_local = datetime.now(user_tz)
+        
+        # 현지 시간이 [오후 4시 이후] 이거나 [새벽 2시 이전]인 경우를 모두 허용합니다.
+        if not (now_local.hour >= 16 or now_local.hour < 2): 
+            embed = discord.Embed(title="❌ 도전 완료 실패", description=f"**도전 완료는 오후 4시부터 새벽 2시까지만 가능합니다.**\n(현재 시간: {now_local.strftime('%H:%M')})", color=discord.Color.red())
             if "timezone" not in player_data:
                 embed.set_footer(text="`!시간대설정` 명령어로 자신의 시간대를 설정할 수 있습니다.")
             await ctx.send(embed=embed)
             return
-
 
             
         all_data = load_data()
