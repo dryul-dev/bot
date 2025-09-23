@@ -573,7 +573,7 @@ class GrowthCog(commands.Cog):
             "사랑 받기 마땅하고 존귀한 존재, 그대여...",
             "가장 좋은 일은 아직 일어나지 않았으니...",
             "어제보다 더 나은 오늘이 함께하리니...",
-            "기억하라, 모두가 그대를 언제나 응원하고 있음을...",
+            "기억하라, 그대를 언제나 응원하고 있음을...",
             "있는 그대로의 그대가 가장 아름다우니...",
             "오늘의 수고가 내일을 바꾸리니, 그대여...",
             "넘어져도 괜찮다는 사실을 알라, 그대여...",
@@ -608,7 +608,7 @@ class GrowthCog(commands.Cog):
             description=f"**{current_blessing}**",
             color=int(player_data['color'][1:], 16)
         )
-        embed.set_footer(text=f"{player_data.get('name', ctx.author.display_name)}님의 하루를 응원합니다.")
+        embed.set_footer(text=f"삼여신의 축복을 당신에게.")
         await ctx.send(embed=embed)
 
     
@@ -711,12 +711,25 @@ class GrowthCog(commands.Cog):
 
         goal_to_achieve = goals[goal_number - 1]
 
-        await ctx.send(f"**'{goal_to_achieve}'** 목표를 달성한 것이 맞습니까? (30초 안에 `예` 입력)")
-        def check(m): return m.author == ctx.author and m.channel == ctx.channel and m.content.lower() == '예'
+        await ctx.send(f"**'{goal_to_achieve}'** 목표를 달성한 것이 맞습니까? (30초 안에 `예` 또는 `아니오` 입력)")
+        
+
+        def check(m): 
+            return m.author == ctx.author and m.channel == ctx.channel and m.content.lower() in ['예', '아니오']
+        
         try:
-            await self.bot.wait_for('message', check=check, timeout=30.0)
+            # 2. 사용자의 응답 메시지(msg)를 받아옵니다.
+            msg = await self.bot.wait_for('message', check=check, timeout=30.0)
+
+            # 3. 응답이 '아니오'일 경우, 취소 메시지를 보내고 함수를 종료합니다.
+            if msg.content.lower() == '아니오':
+                return await ctx.send("작업이 취소되었습니다.")
+                
         except asyncio.TimeoutError:
             return await ctx.send("시간이 초과되어 목표 달성이 취소되었습니다.")
+
+
+
 
         achieved_goal = goals.pop(goal_number - 1)
         player_data["goals"] = goals
