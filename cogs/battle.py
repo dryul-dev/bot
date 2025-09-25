@@ -95,7 +95,7 @@ class Battle:
         self.turn_timer = asyncio.create_task(self.timeout_task())
     async def timeout_task(self):
         try:
-            await asyncio.sleep(300); loser = self.current_turn_player; winner = self.get_opponent_stats(loser)
+            await asyncio.sleep(600); loser = self.current_turn_player; winner = self.get_opponent_stats(loser)
             await self.end_battle(winner, f"시간 초과로 {loser.display_name}님이 패배했습니다.")
             if self.channel.id in self.active_battles: del self.active_battles[self.channel.id]
         except asyncio.CancelledError: pass
@@ -501,7 +501,7 @@ class BattleCog(commands.Cog):
             empty_cells = [str(i + 1) for i in range(15) if i not in occupied_positions]
             if not empty_cells: return await ctx.send("이동할 수 있는 빈 칸이 없습니다.")
             
-            await ctx.send(f"**텔레포트**: 이동할 위치의 번호를 입력해주세요.\n> 가능한 위치: `{'`, `'.join(empty_cells)}`")
+            await ctx.send(f"이동할 위치의 번호를 입력해주세요.\n> 가능한 위치: `{'`, `'.join(empty_cells)}`")
             def check(m): return m.author == ctx.author and m.channel == ctx.channel and m.content in empty_cells
             try:
                 msg = await self.bot.wait_for('message', check=check, timeout=15.0)
