@@ -760,6 +760,46 @@ class GrowthCog(commands.Cog):
         await ctx.send(embed=embed)
    
 
+# cogs/growth.py 의 GrowthCog 클래스 내부에 추가
+
+    @commands.command(name="목표수정")
+    async def edit_goal(self, ctx, goal_number: int, *, new_goal_name: str):
+        """번호에 해당하는 목표의 내용을 수정합니다."""
+        all_data = load_data()
+        player_id = str(ctx.author.id)
+        player_data = all_data.get(player_id)
+
+        if not player_data or not player_data.get("registered"):
+            return await ctx.send("먼저 `!등록`을 진행해주세요.")
+
+        # 새 목표 이름 글자 수 제한 확인
+        if len(new_goal_name) > 10:
+            return await ctx.send("새로운 목표는 공백 포함 10자 이내로 설정해주세요.")
+
+        goals = player_data.get("goals", [])
+        
+        # 유효한 번호인지 확인
+        if not (1 <= goal_number <= len(goals)):
+            return await ctx.send(f"잘못된 번호입니다. 1번부터 {len(goals)}번까지의 목표만 수정할 수 있습니다.")
+
+        # 목표 수정
+        original_goal = goals[goal_number - 1]
+        goals[goal_number - 1] = new_goal_name
+        
+        save_data(all_data)
+
+        embed = discord.Embed(
+            title="🎯 목표 수정 완료",
+            description=f"**{goal_number}번** 목표의 내용이 성공적으로 변경되었습니다.",
+            color=int(player_data.get('color', '#FFFFFF')[1:], 16)
+        )
+        embed.add_field(name="변경 전", value=original_goal, inline=False)
+        embed.add_field(name="변경 후", value=new_goal_name, inline=False)
+        
+        await ctx.send(embed=embed)
+
+
+
     @commands.command(name="목표중단")
     async def abandon_goal(self, ctx, goal_number: int):
         """등록된 목표를 중단하고, 격려 포인트를 받습니다."""

@@ -74,7 +74,7 @@ class SchoolCog(commands.Cog):
 
     @commands.command(name="교내상점")
     async def shop(self, ctx):
-        embed = discord.Embed(title="🏪 교내 상점", description="`!구매 [아이템이름]`으로 물건을 구매할 수 있습니다.", color=0x00308F)
+        embed = discord.Embed(title="🪙 교내 상점", description="`!구매 [아이템이름]`으로 물건을 구매할 수 있습니다.", color=0x00308F)
         for name, data in SHOP_ITEMS.items():
             embed.add_field(name=f"{name}", value=f"> `{data['price']}` P", inline=True)
         embed.set_footer(text="남은 청춘을 즐겨라, 아해들아!")
