@@ -873,31 +873,37 @@ class GrowthCog(commands.Cog):
         if isinstance(error, commands.NotOwner):
             await ctx.send("이 명령어는 봇 소유자만 사용할 수 있습니다.")
 
+# cogs/growth.py 의 GrowthCog 클래스 내부
+
     @commands.command(name="데이터조회")
-    @commands.is_owner() # 봇 소유자만 실행 가능하도록 제한
-    async def view_user_data(self, ctx, target_user: discord.Member):
-        """[관리자용] 특정 유저의 raw data를 json 형식으로 확인합니다."""
+    @commands.is_owner()
+    async def view_user_data(self, ctx, *, target_name: str):
+        """[관리자용] 등록된 이름으로 유저의 raw data를 확인합니다."""
         
         all_data = load_data()
-        target_id = str(target_user.id)
-        player_data = all_data.get(target_id)
+        
+        # 1. 이름으로 플레이어 찾기
+        target_id, player_data = None, None
+        for pid, pdata in all_data.items():
+            if pdata.get("name") == target_name.strip('"'):
+                target_id = pid
+                player_data = pdata
+                break
 
         if not player_data:
-            return await ctx.send(f"{target_user.display_name}님의 데이터를 찾을 수 없습니다.")
+            return await ctx.send(f"'{target_name}' 이름을 가진 플레이어를 찾을 수 없습니다.")
 
-        # json 데이터를 보기 좋게 문자열로 변환
-        # indent=4는 보기 좋게 4칸 들여쓰기를, ensure_ascii=False는 한글이 깨지지 않게 합니다.
+        # 2. json 데이터를 보기 좋게 변환하여 출력 (이하 로직 동일)
         data_str = json.dumps(player_data, indent=4, ensure_ascii=False)
         
-        # 데이터가 너무 길 경우를 대비하여 여러 메시지로 나누어 보낼 수 있도록 처리
         if len(data_str) > 1900:
-            await ctx.send(f"📄 **{target_user.display_name}**님의 데이터가 너무 길어 여러 부분으로 나누어 표시합니다.")
+            await ctx.send(f"📄 **{target_name}**님의 데이터가 너무 길어 여러 부분으로 나누어 표시합니다.")
             for i in range(0, len(data_str), 1900):
                 chunk = data_str[i:i+1900]
                 await ctx.send(f"```json\n{chunk}\n```")
         else:
             embed = discord.Embed(
-                title=f"📄 {target_user.display_name}님의 데이터",
+                title=f"📄 {target_name}님의 데이터",
                 description=f"```json\n{data_str}\n```",
                 color=discord.Color.blue()
             )
@@ -908,12 +914,11 @@ class GrowthCog(commands.Cog):
         if isinstance(error, commands.NotOwner):
             await ctx.send("이 명령어는 봇 소유자만 사용할 수 있습니다.")
         elif isinstance(error, commands.MissingRequiredArgument):
-            await ctx.send("사용법: `!데이터조회 @유저이름`")
+            # 사용법 안내 메시지 수정
+            await ctx.send("사용법: `!데이터조회 [등록된 이름]`\n> 이름에 공백이 있다면 따옴표로 감싸주세요.")
         else:
-            print(f"!데이터조회 명령어 오류 발생: {error}") # 터미널에 상세 오류 출력
+            print(f"!데이터조회 명령어 오류 발생: {error}")
             await ctx.send("명령어 처리 중 알 수 없는 오류가 발생했습니다.")
-
-
 
     @commands.command(name="성장관리")
     @commands.is_owner() # 봇 소유자만 실행 가능
