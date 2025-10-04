@@ -1083,6 +1083,61 @@ class GrowthCog(commands.Cog):
         save_data(all_data)
         await ctx.send(f"✅ 완료! 총 {len(all_data)}명의 유저 중 {updated_users}명의 데이터 구조를 업데이트했습니다.")
 
+# cogs/growth.py 의 GrowthCog 클래스 내부에 추가
+
+    @commands.command(name="속성관리")
+    @commands.is_owner()
+    async def manage_attribute(self, ctx, target_name: str, *, new_attribute: str):
+        """[관리자용] 등록된 이름으로 유저의 속성을 변경하거나 제거합니다."""
+        
+        all_data = load_data()
+        
+        # 1. 이름으로 플레이어 찾기
+        target_id, target_data = None, None
+        for player_id, player_info in all_data.items():
+            if player_info.get("name") == target_name.strip('"'):
+                target_id = player_id
+                target_data = player_info
+                break
+        
+        if not target_data:
+            return await ctx.send(f"'{target_name}' 이름을 가진 플레이어를 찾을 수 없습니다.")
+
+        # 2. 새로운 속성 값 유효성 검사
+        valid_attributes = ["Gut", "Wit", "Heart", "없음"]
+        # 입력값을 표준화 (예: gut -> Gut, 없음 -> 없음)
+        normalized_new_attribute = new_attribute.title() if new_attribute.lower() != "없음" else "없음"
+        
+        if normalized_new_attribute not in valid_attributes:
+            return await ctx.send(f"잘못된 속성입니다. `Gut`, `Wit`, `Heart`, `없음` 중에서 선택해주세요.")
+
+        # 3. 데이터 업데이트
+        old_attribute = target_data.get("attribute") or "없음"
+        
+        if normalized_new_attribute == "없음":
+            all_data[target_id]["attribute"] = None
+        else:
+            all_data[target_id]["attribute"] = normalized_new_attribute
+            
+        save_data(all_data)
+
+        # 4. 결과 알림
+        final_attribute = all_data[target_id]["attribute"] or "없음"
+        embed = discord.Embed(
+            title="✨ 속성 관리 완료",
+            description=f"**{target_name}**님의 속성을 성공적으로 수정했습니다.",
+            color=discord.Color.blue()
+        )
+        embed.add_field(name="대상", value=target_name, inline=True)
+        embed.add_field(name="변경 내용", value=f"`{old_attribute}` → `{final_attribute}`", inline=False)
+        await ctx.send(embed=embed)
+
+    @manage_attribute.error
+    async def manage_attribute_error(self, ctx, error):
+        if isinstance(error, commands.NotOwner):
+            await ctx.send("이 명령어는 봇 소유자만 사용할 수 있습니다.")
+        elif isinstance(error, commands.MissingRequiredArgument):
+            await ctx.send("사용법: `!속성관리 [이름] [새 속성 또는 '없음']`\n> 예시: `!속성관리 홍길동 Wit`")
 
 # 봇에 Cog를 추가하기 위한 필수 함수
 async def setup(bot):
